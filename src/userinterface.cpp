@@ -113,6 +113,8 @@ bool CUserInterface::Initialize (void)
 									m_pConfig->GetButtonActionBack (),
 									m_pConfig->GetButtonPinSelect (),
 									m_pConfig->GetButtonActionSelect (),
+									m_pConfig->GetButtonPinSelect2 (),
+									m_pConfig->GetButtonActionSelect2 (),
 									m_pConfig->GetButtonPinHome (),
 									m_pConfig->GetButtonActionHome (),
 									m_pConfig->GetDoubleClickTimeout (),
@@ -122,7 +124,9 @@ bool CUserInterface::Initialize (void)
 									m_pConfig->GetMIDIButtonNext (),
 									m_pConfig->GetMIDIButtonBack (),
 									m_pConfig->GetMIDIButtonSelect (),
-									m_pConfig->GetMIDIButtonHome ()
+									m_pConfig->GetMIDIButtonHome (),
+									m_pConfig->GetI2CButtonAddr (),
+									m_pI2CMaster
 								  );
 	assert (m_pUIButtons);
 

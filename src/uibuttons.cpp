@@ -29,6 +29,7 @@ CUIButton::CUIButton (void)
 :	m_pinNumber (0),
 	m_pin (0),
 	m_midipin (0),
+	m_i2cpin (0),
 	m_lastValue (1),
 	m_timer (0),
 	m_debounceTimer (0),
@@ -59,7 +60,7 @@ void CUIButton::reset (void)
 	m_numClicks = 0;
 }
 
-boolean CUIButton::Initialize (unsigned pinNumber, unsigned doubleClickTimeout, unsigned longPressTimeout)
+boolean CUIButton::Initialize (unsigned pinNumber, unsigned doubleClickTimeout, unsigned longPressTimeout, CI2CPin *pI2CPin)
 {
 	assert (!m_pin);
 	assert(longPressTimeout >= doubleClickTimeout);
@@ -78,7 +79,23 @@ boolean CUIButton::Initialize (unsigned pinNumber, unsigned doubleClickTimeout, 
 		{
 			LOGDBG("MIDI Button on pin: %d (%x)", m_pinNumber, m_pinNumber);
 			m_midipin = new CMIDIPin (m_pinNumber);
-		} else {
+		}
+		else if (isI2CPin(m_pinNumber))
+		{
+			unsigned i2caddr = pI2CPin->GetAddress();
+			if ((i2caddr != 0) && (pI2CPin->IsValidPin(m_pinNumber)))
+			{
+				LOGDBG("I2C  Button on pin: %d (%x) [0x%02X]", m_pinNumber, m_pinNumber, i2caddr);
+				m_i2cpin = pI2CPin;
+			}
+			else
+			{
+				LOGWARN("I2C  Button on pin: %d (%x) - FAILED", m_pinNumber, m_pinNumber);
+				return FALSE;
+			}
+		}
+		else
+		{
 			LOGDBG("GPIO Button on pin: %d (%x)", m_pinNumber, m_pinNumber);
 			m_pin = new CGPIOPin (m_pinNumber, GPIOModeInputPullUp);
 		}
@@ -118,14 +135,29 @@ CUIButton::BtnTrigger CUIButton::ReadTrigger (void)
 		}
 		value = m_midipin->Read();
 	}
-	else
+	else if (isI2CPin(m_pinNumber))
 	{
-		if (!m_pin)
+		if (m_i2cpin)
+		{
+			value = m_i2cpin->Read(m_pinNumber);
+		}
+		else
 		{
 			// Always return "not pressed" if not configured
 			return BtnTriggerNone;
 		}
-		value = m_pin->Read();
+	}
+	else
+	{
+		if (m_pin)
+		{
+			value = m_pin->Read();
+		}
+		else
+		{
+			// Always return "not pressed" if not configured
+			return BtnTriggerNone;
+		}
 	}
 
 	if (m_timer < m_longPressTimeout) {
@@ -262,9 +294,11 @@ CUIButtons::CUIButtons (
 			unsigned nextPin, const char *nextAction,
 			unsigned backPin, const char *backAction,
 			unsigned selectPin, const char *selectAction,
+			unsigned select2Pin, const char *select2Action,
 			unsigned homePin, const char *homeAction,
 			unsigned doubleClickTimeout, unsigned longPressTimeout,
-			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi
+			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi,
+			unsigned i2cAddr,  CI2CMaster *pI2CMaster
 )
 :	m_doubleClickTimeout(doubleClickTimeout),
 	m_longPressTimeout(longPressTimeout),
@@ -276,6 +310,8 @@ CUIButtons::CUIButtons (
 	m_backAction(CUIButton::triggerTypeFromString(backAction)),
 	m_selectPin(selectPin),
 	m_selectAction(CUIButton::triggerTypeFromString(selectAction)),
+	m_select2Pin(select2Pin),
+	m_select2Action(CUIButton::triggerTypeFromString(select2Action)),
 	m_homePin(homePin),
 	m_homeAction(CUIButton::triggerTypeFromString(homeAction)),
 	m_notesMidi(notesMidi),
@@ -284,6 +320,9 @@ CUIButtons::CUIButtons (
 	m_backMidi(ccToMidiPin(backMidi)),
 	m_selectMidi(ccToMidiPin(selectMidi)),
 	m_homeMidi(ccToMidiPin(homeMidi)),
+	m_i2cAddr(i2cAddr),
+	m_pI2CMaster(pI2CMaster),
+	m_I2CPin(pI2CMaster,i2cAddr),
 	m_eventHandler (0),
 	m_lastTick (0)
 {
@@ -315,12 +354,12 @@ boolean CUIButtons::Initialize (void)
 	// longpress. We may not initialise all of the buttons.
 	// MIDI buttons only support a single click.
 	unsigned pins[MAX_BUTTONS] = {
-		m_prevPin, m_nextPin, m_backPin, m_selectPin, m_homePin,
+		m_prevPin, m_nextPin, m_backPin, m_selectPin, m_select2Pin, m_homePin,
 		m_prevMidi, m_nextMidi, m_backMidi, m_selectMidi, m_homeMidi
 	};
 	CUIButton::BtnTrigger triggers[MAX_BUTTONS] = {
 		// Normal buttons
-		m_prevAction, m_nextAction, m_backAction, m_selectAction, m_homeAction,
+		m_prevAction, m_nextAction, m_backAction, m_selectAction, m_select2Action, m_homeAction,
 		// MIDI Buttons only support a single click (at present)
 		CUIButton::BtnTriggerClick, CUIButton::BtnTriggerClick, CUIButton::BtnTriggerClick, CUIButton::BtnTriggerClick, CUIButton::BtnTriggerClick
 	};
@@ -330,6 +369,7 @@ boolean CUIButtons::Initialize (void)
 		CUIButton::BtnEventNext,
 		CUIButton::BtnEventBack,
 		CUIButton::BtnEventSelect,
+		CUIButton::BtnEventSelect,
 		CUIButton::BtnEventHome,
 		// MIDI buttons
 		CUIButton::BtnEventPrev,
@@ -338,6 +378,15 @@ boolean CUIButtons::Initialize (void)
 		CUIButton::BtnEventSelect,
 		CUIButton::BtnEventHome
 	};
+
+	// Set up I2C IO expander if used
+	if (m_i2cAddr != 0)
+	{
+		if (!m_I2CPin.Initialize())
+		{
+			// Failed - but let rest of code continue in case other buttons exist
+		}
+	}
 
 	// Setup normal GPIO buttons first
 	for (unsigned i=0; i<MAX_GPIO_BUTTONS; i++) {
@@ -356,7 +405,7 @@ boolean CUIButtons::Initialize (void)
 			}
 			else if (m_buttons[j].getPinNumber() == 0) {
 				// This is un-initialised so can be assigned
-				m_buttons[j].Initialize(pins[i], doubleClickTimeout, longPressTimeout);
+				m_buttons[j].Initialize(pins[i], doubleClickTimeout, longPressTimeout, &m_I2CPin);
 				break;
 			}
 		}
@@ -375,7 +424,7 @@ boolean CUIButtons::Initialize (void)
 			if (m_buttons[j].getPinNumber() == 0) {
 				// This is un-initialised so can be assigned
 				// doubleClickTimeout and longPressTimeout are ignored for MIDI buttons at present
-				m_buttons[j].Initialize(pins[i], doubleClickTimeout, longPressTimeout);
+				m_buttons[j].Initialize(pins[i], doubleClickTimeout, longPressTimeout, &m_I2CPin);
 				break;
 			}
 		}
@@ -441,6 +490,12 @@ void CUIButtons::Update (void)
 	}
 
 	m_lastTick = currentTick;
+
+	// Scan I2C IO Expander (if used)
+	if (m_i2cAddr != 0)
+	{
+		m_I2CPin.Update();
+	}
 
 	for (unsigned i=0; i<MAX_BUTTONS; i++) {
 		CUIButton::BtnEvent event = m_buttons[i].Read();

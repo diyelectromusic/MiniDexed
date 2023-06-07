@@ -93,10 +93,12 @@ void CConfig::Load (void)
 	m_nLCDColumns = m_Properties.GetNumber ("LCDColumns", 16);
 	m_nLCDRows = m_Properties.GetNumber ("LCDRows", 2);
 
+	m_nI2CButtonAddr = m_Properties.GetNumber ("I2CButtonAddr", 0);
 	m_nButtonPinPrev = m_Properties.GetNumber ("ButtonPinPrev", 0);
 	m_nButtonPinNext = m_Properties.GetNumber ("ButtonPinNext", 0);
 	m_nButtonPinBack = m_Properties.GetNumber ("ButtonPinBack", 11);
 	m_nButtonPinSelect = m_Properties.GetNumber ("ButtonPinSelect", 11);
+	m_nButtonPinSelect2 = m_Properties.GetNumber ("ButtonPinSelect2", 0);
 	m_nButtonPinHome = m_Properties.GetNumber ("ButtonPinHome", 11);
 	m_nButtonPinShortcut = m_Properties.GetNumber ("ButtonPinShortcut", 11);
 
@@ -104,6 +106,7 @@ void CConfig::Load (void)
 	m_ButtonActionNext = m_Properties.GetString ("ButtonActionNext", "");
 	m_ButtonActionBack = m_Properties.GetString ("ButtonActionBack", "doubleclick");
 	m_ButtonActionSelect = m_Properties.GetString ("ButtonActionSelect", "click");
+	m_ButtonActionSelect2 = m_Properties.GetString ("ButtonActionSelect2", "");
 	m_ButtonActionHome = m_Properties.GetString ("ButtonActionHome", "longpress");
 
 	m_nDoubleClickTimeout = m_Properties.GetNumber ("DoubleClickTimeout", 400);
@@ -271,6 +274,11 @@ unsigned CConfig::GetLCDRows (void) const
 	return m_nLCDRows;
 }
 
+unsigned CConfig::GetI2CButtonAddr (void) const
+{
+	return m_nI2CButtonAddr;
+}
+
 unsigned CConfig::GetButtonPinPrev (void) const
 {
 	return m_nButtonPinPrev;
@@ -289,6 +297,11 @@ unsigned CConfig::GetButtonPinBack (void) const
 unsigned CConfig::GetButtonPinSelect (void) const
 {
 	return m_nButtonPinSelect;
+}
+
+unsigned CConfig::GetButtonPinSelect2 (void) const
+{
+	return m_nButtonPinSelect2;
 }
 
 unsigned CConfig::GetButtonPinHome (void) const
@@ -319,6 +332,11 @@ const char *CConfig::GetButtonActionBack (void) const
 const char *CConfig::GetButtonActionSelect (void) const
 {
 	return m_ButtonActionSelect.c_str();
+}
+
+const char *CConfig::GetButtonActionSelect2 (void) const
+{
+	return m_ButtonActionSelect2.c_str();
 }
 
 const char *CConfig::GetButtonActionHome (void) const

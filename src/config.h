@@ -104,10 +104,15 @@ public:
 
 	// GPIO Button Navigation
 	// GPIO pin numbers are chip numbers, not header positions
+	//
+	// If I2cButtonAddr is non-zero then a single register
+	// I2C 8-way digital IO expander (e.g. PCF8574) is assumed.
+	unsigned GetI2CButtonAddr (void) const;
 	unsigned GetButtonPinPrev (void) const;
 	unsigned GetButtonPinNext (void) const;
 	unsigned GetButtonPinBack (void) const;
 	unsigned GetButtonPinSelect (void) const;
+	unsigned GetButtonPinSelect2 (void) const;
 	unsigned GetButtonPinHome (void) const;
 	unsigned GetButtonPinShortcut (void) const;
 
@@ -116,6 +121,7 @@ public:
 	const char *GetButtonActionNext (void) const;
 	const char *GetButtonActionBack (void) const;
 	const char *GetButtonActionSelect (void) const;
+	const char *GetButtonActionSelect2 (void) const;
 	const char *GetButtonActionHome (void) const;
 	
 	// Timeouts for button events in milliseconds
@@ -181,10 +187,12 @@ private:
 	unsigned m_nLCDColumns;
 	unsigned m_nLCDRows;
 	
+	unsigned m_nI2CButtonAddr;
 	unsigned m_nButtonPinPrev;
 	unsigned m_nButtonPinNext;
 	unsigned m_nButtonPinBack;
 	unsigned m_nButtonPinSelect;
+	unsigned m_nButtonPinSelect2;
 	unsigned m_nButtonPinHome;
 	unsigned m_nButtonPinShortcut;
 
@@ -192,6 +200,7 @@ private:
 	std::string m_ButtonActionNext;
 	std::string m_ButtonActionBack;
 	std::string m_ButtonActionSelect;
+	std::string m_ButtonActionSelect2;
 	std::string m_ButtonActionHome;
 	
 	unsigned m_nDoubleClickTimeout;

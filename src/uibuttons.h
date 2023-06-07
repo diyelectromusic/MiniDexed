@@ -22,12 +22,14 @@
 
 #include <circle/gpiopin.h>
 #include <circle/types.h>
+#include <circle/i2cmaster.h>
 #include "midipin.h"
+#include "i2cpin.h"
 #include "config.h"
 
 #define BUTTONS_UPDATE_NUM_TICKS 100
 #define DEBOUNCE_TIME 100
-#define MAX_GPIO_BUTTONS 5
+#define MAX_GPIO_BUTTONS 6
 #define MAX_MIDI_BUTTONS 5
 #define MAX_BUTTONS (MAX_GPIO_BUTTONS+MAX_MIDI_BUTTONS)
 
@@ -59,7 +61,7 @@ public:
 	~CUIButton (void);
 	
 	void reset (void);
-	boolean Initialize (unsigned pinNumber, unsigned doubleClickTimeout, unsigned longPressTimeout);
+	boolean Initialize (unsigned pinNumber, unsigned doubleClickTimeout, unsigned longPressTimeout, CI2CPin *pI2CPin);
 
 	void setClickEvent(BtnEvent clickEvent);
 	void setDoubleClickEvent(BtnEvent doubleClickEvent);
@@ -80,6 +82,8 @@ private:
 	CGPIOPin *m_pin;
 	// MIDI pin
 	CMIDIPin *m_midipin;
+	// I2C expander pin
+	CI2CPin *m_i2cpin;
 	// The value of the pin at the end of the last loop
 	unsigned m_lastValue;
 	// Set to 0 on press, increment each read, use to trigger events
@@ -112,9 +116,11 @@ public:
 			unsigned nextPin, const char *nextAction,
 			unsigned backPin, const char *backAction,
 			unsigned selectPin, const char *selectAction,
+			unsigned select2Pin, const char *select2Action,
 			unsigned homePin, const char *homeAction,
 			unsigned doubleClickTimeout, unsigned longPressTimeout,
-			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi
+			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi,
+			unsigned i2cAddr, CI2CMaster *pI2CMaster
 	);
 	~CUIButtons (void);
 	
@@ -131,7 +137,7 @@ public:
 private:
 	// Array of normal GPIO buttons and "MIDI buttons"
 	CUIButton m_buttons[MAX_BUTTONS];
-	
+
 	// Timeout for double click in tenths of a millisecond
 	unsigned m_doubleClickTimeout;
 	// Timeout for long press in tenths of a millisecond
@@ -146,6 +152,8 @@ private:
 	CUIButton::BtnTrigger m_backAction;
 	unsigned m_selectPin;
 	CUIButton::BtnTrigger m_selectAction;
+	unsigned m_select2Pin;
+	CUIButton::BtnTrigger m_select2Action;
 	unsigned m_homePin;
 	CUIButton::BtnTrigger m_homeAction;
 	
@@ -156,6 +164,11 @@ private:
 	unsigned m_backMidi;
 	unsigned m_selectMidi;
 	unsigned m_homeMidi;
+	
+	// I2C Expander buttons
+	unsigned m_i2cAddr;
+	CI2CMaster *m_pI2CMaster;
+	CI2CPin  m_I2CPin;
 
 	BtnEventHandler *m_eventHandler;
 	void *m_eventParam;
