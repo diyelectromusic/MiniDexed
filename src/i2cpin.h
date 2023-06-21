@@ -36,7 +36,7 @@
 class CI2CPin
 {
 public:
-	CI2CPin (CI2CMaster *pI2CMaster, unsigned addr);
+	CI2CPin (CI2CMaster *pI2CMaster, unsigned addr, unsigned size);
 	~CI2CPin (void);
 
 	boolean Initialize (void);
@@ -50,8 +50,9 @@ public:
 
 private:
 	unsigned m_nI2CAddr;
+	unsigned m_nI2CSize;
 	CI2CMaster *m_pI2CMaster;
-	u8 m_nValue;
+	u16 m_nValue;
 };
 
 #endif

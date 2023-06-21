@@ -298,7 +298,7 @@ CUIButtons::CUIButtons (
 			unsigned homePin, const char *homeAction,
 			unsigned doubleClickTimeout, unsigned longPressTimeout,
 			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi,
-			unsigned i2cAddr,  CI2CMaster *pI2CMaster
+			unsigned i2cAddr, unsigned i2cSize, CI2CMaster *pI2CMaster
 )
 :	m_doubleClickTimeout(doubleClickTimeout),
 	m_longPressTimeout(longPressTimeout),
@@ -321,8 +321,9 @@ CUIButtons::CUIButtons (
 	m_selectMidi(ccToMidiPin(selectMidi)),
 	m_homeMidi(ccToMidiPin(homeMidi)),
 	m_i2cAddr(i2cAddr),
+	m_i2cSize(i2cSize),
 	m_pI2CMaster(pI2CMaster),
-	m_I2CPin(pI2CMaster,i2cAddr),
+	m_I2CPin(pI2CMaster,i2cAddr,i2cSize),
 	m_eventHandler (0),
 	m_lastTick (0)
 {

@@ -126,6 +126,7 @@ bool CUserInterface::Initialize (void)
 									m_pConfig->GetMIDIButtonSelect (),
 									m_pConfig->GetMIDIButtonHome (),
 									m_pConfig->GetI2CButtonAddr (),
+								   	m_pConfig->GetI2CButtonSize (),
 									m_pI2CMaster
 								  );
 	assert (m_pUIButtons);

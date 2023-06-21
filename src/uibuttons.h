@@ -120,7 +120,7 @@ public:
 			unsigned homePin, const char *homeAction,
 			unsigned doubleClickTimeout, unsigned longPressTimeout,
 			unsigned notesMidi, unsigned prevMidi, unsigned nextMidi, unsigned backMidi, unsigned selectMidi, unsigned homeMidi,
-			unsigned i2cAddr, CI2CMaster *pI2CMaster
+			unsigned i2cAddr, unsigned i2cSize, CI2CMaster *pI2CMaster
 	);
 	~CUIButtons (void);
 	
@@ -167,6 +167,7 @@ private:
 	
 	// I2C Expander buttons
 	unsigned m_i2cAddr;
+	unsigned m_i2cSize;
 	CI2CMaster *m_pI2CMaster;
 	CI2CPin  m_I2CPin;
 

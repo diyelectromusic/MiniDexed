@@ -106,8 +106,10 @@ public:
 	// GPIO pin numbers are chip numbers, not header positions
 	//
 	// If I2cButtonAddr is non-zero then a single register
-	// I2C 8-way digital IO expander (e.g. PCF8574) is assumed.
+	// I2C 8-way digital IO expander (e.g. PCF8574 or
+	// double register 16-way (e.g. PCF8575) is assumed.
 	unsigned GetI2CButtonAddr (void) const;
+	unsigned GetI2CButtonSize (void) const;
 	unsigned GetButtonPinPrev (void) const;
 	unsigned GetButtonPinNext (void) const;
 	unsigned GetButtonPinBack (void) const;
@@ -188,6 +190,7 @@ private:
 	unsigned m_nLCDRows;
 	
 	unsigned m_nI2CButtonAddr;
+	unsigned m_nI2CButtonSize;
 	unsigned m_nButtonPinPrev;
 	unsigned m_nButtonPinNext;
 	unsigned m_nButtonPinBack;

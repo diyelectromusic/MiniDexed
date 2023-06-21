@@ -94,6 +94,7 @@ void CConfig::Load (void)
 	m_nLCDRows = m_Properties.GetNumber ("LCDRows", 2);
 
 	m_nI2CButtonAddr = m_Properties.GetNumber ("I2CButtonAddr", 0);
+	m_nI2CButtonSize = m_Properties.GetNumber ("I2CButtonSize", 8);
 	m_nButtonPinPrev = m_Properties.GetNumber ("ButtonPinPrev", 0);
 	m_nButtonPinNext = m_Properties.GetNumber ("ButtonPinNext", 0);
 	m_nButtonPinBack = m_Properties.GetNumber ("ButtonPinBack", 11);
@@ -277,6 +278,11 @@ unsigned CConfig::GetLCDRows (void) const
 unsigned CConfig::GetI2CButtonAddr (void) const
 {
 	return m_nI2CButtonAddr;
+}
+
+unsigned CConfig::GetI2CButtonSize (void) const
+{
+	return m_nI2CButtonSize;
 }
 
 unsigned CConfig::GetButtonPinPrev (void) const
