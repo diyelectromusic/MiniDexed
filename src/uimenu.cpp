@@ -52,6 +52,18 @@ const CUIMenu::TMenuItem CUIMenu::s_MainMenu[] =
 	{"TG7",		MenuHandler,	s_TGMenu, 6},
 	{"TG8",		MenuHandler,	s_TGMenu, 7},
 #endif
+#if (TG_EXPANDERS>0)
+	{"TG9",		MenuHandler,	s_TGExpMenu, 8},
+#endif
+#if (TG_EXPANDERS>1)
+	{"TG10",		MenuHandler,	s_TGExpMenu, 9},
+	{"TG11",		MenuHandler,	s_TGExpMenu, 10},
+	{"TG12",		MenuHandler,	s_TGExpMenu, 11},
+	{"TG13",		MenuHandler,	s_TGExpMenu, 12},
+	{"TG14",		MenuHandler,	s_TGExpMenu, 13},
+	{"TG15",		MenuHandler,	s_TGExpMenu, 14},
+	{"TG16",		MenuHandler,	s_TGExpMenu, 15},
+#endif
 	{"Effects",	MenuHandler,	s_EffectsMenu},
 	{"Performance",	MenuHandler, s_PerformanceMenu}, 
 	{0}
@@ -75,6 +87,27 @@ const CUIMenu::TMenuItem CUIMenu::s_TGMenu[] =
 	{"Modulation",		MenuHandler,		s_ModulationMenu},
 	{"Channel",	EditTGParameter,	0,	CMiniDexed::TGParameterMIDIChannel},
 	{"Edit Voice",	MenuHandler,		s_EditVoiceMenu},
+	{0}
+};
+
+// Same as s_TGMenu but with no Edit Voice
+const CUIMenu::TMenuItem CUIMenu::s_TGExpMenu[] =
+{
+	{"Voice",	EditProgramNumber},
+	{"Bank",	EditVoiceBankNumber},
+	{"Volume",	EditTGParameter,	0,	CMiniDexed::TGParameterVolume},
+#ifdef ARM_ALLOW_MULTI_CORE
+	{"Pan",		EditTGParameter,	0,	CMiniDexed::TGParameterPan},
+#endif
+	{"Reverb-Send",	EditTGParameter,	0,	CMiniDexed::TGParameterReverbSend},
+	{"Detune",	EditTGParameter,	0,	CMiniDexed::TGParameterMasterTune},
+	{"Cutoff",	EditTGParameter,	0,	CMiniDexed::TGParameterCutoff},
+	{"Resonance",	EditTGParameter,	0,	CMiniDexed::TGParameterResonance},
+	{"Pitch Bend",	MenuHandler,		s_EditPitchBendMenu},
+	{"Portamento",		MenuHandler,		s_EditPortamentoMenu},
+	{"Poly/Mono",		EditTGParameter,	0,	CMiniDexed::TGParameterMonoMode}, 
+	{"Modulation",		MenuHandler,		s_ModulationMenu},
+	{"Channel",	EditTGParameter,	0,	CMiniDexed::TGParameterMIDIChannel},
 	{0}
 };
 
@@ -335,6 +368,7 @@ const CUIMenu::TMenuItem CUIMenu::s_PerformanceMenu[] =
 CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed)
 :	m_pUI (pUI),
 	m_pMiniDexed (pMiniDexed),
+	m_nRemoteExpanders (0),
 	m_pParentMenu (s_MenuRoot),
 	m_pCurrentMenu (s_MainMenu),
 	m_nCurrentMenuItem (0),
@@ -342,6 +376,8 @@ CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed)
 	m_nCurrentParameter (0),
 	m_nCurrentMenuDepth (0)
 {
+	m_nRemoteExpanders = pMiniDexed->getRemoteTGExpanders();
+
 #ifndef ARM_ALLOW_MULTI_CORE
 	// If there is just one core, then there is only a single
 	// tone generator so start on the TG1 menu...
@@ -455,6 +491,15 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 		{
 			pUIMenu->m_nCurrentSelection--;
 		}
+		// Need a special case to adjust the Main Menu for TG Expanders
+		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nRemoteExpanders==0))
+		{
+			// Keep skipping over the TGExpander Menu
+			while ((pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) && (pUIMenu->m_nCurrentSelection > 0))
+			{
+				pUIMenu->m_nCurrentSelection--;
+			}
+		}
 		break;
 
 	case MenuEventStepUp:
@@ -462,6 +507,15 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 		if (!pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Name)  // more entries?
 		{
 			pUIMenu->m_nCurrentSelection--;
+		}
+		// Need a special case to adjust the Main Menu for TG Expanders
+		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nRemoteExpanders==0))
+		{
+			// Keep skipping over the TGExpander Menu
+			while ((pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) && (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name))
+			{
+				pUIMenu->m_nCurrentSelection++;
+			}
 		}
 		break;
 
@@ -1149,7 +1203,7 @@ void CUIMenu::TGShortcutHandler (TMenuEvent Event)
 	assert (m_nCurrentMenuDepth >= 2);
 	assert (m_MenuStackMenu[0] = s_MainMenu);
 	unsigned nTG = m_nMenuStackSelection[0];
-	assert (nTG < CConfig::ToneGenerators);
+	assert (nTG < CConfig::AllToneGenerators);
 	assert (m_nMenuStackItem[1] == nTG);
 	assert (m_nMenuStackParameter[1] == nTG);
 
@@ -1164,7 +1218,7 @@ void CUIMenu::TGShortcutHandler (TMenuEvent Event)
 		nTG++;
 	}
 
-	if (nTG < CConfig::ToneGenerators)
+	if (nTG < CConfig::AllToneGenerators)
 	{
 		m_nMenuStackSelection[0] = nTG;
 		m_nMenuStackItem[1] = nTG;

@@ -32,11 +32,17 @@ class CConfig		// Configuration for MiniDexed
 {
 public:
 #ifndef ARM_ALLOW_MULTI_CORE
+	#define TG_EXPANDERS 1
 	static const unsigned ToneGenerators = 1;
+	static const unsigned TGExpanders = TG_EXPANDERS;
+	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
 #else
+	#define TG_EXPANDERS 8
 	static const unsigned TGsCore1 = 2;		// process 2 TGs on core 1
 	static const unsigned TGsCore23 = 3;		// process 3 TGs on core 2 and 3 each
 	static const unsigned ToneGenerators = TGsCore1 + 2*TGsCore23;
+	static const unsigned TGExpanders = TG_EXPANDERS;
+	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
 #endif
 
 #if RASPPI == 1
@@ -70,6 +76,8 @@ public:
 	unsigned GetDACI2CAddress (void) const;		// 0 for auto probing
 	bool GetChannelsSwapped (void) const;
 	unsigned GetEngineType (void) const;
+	unsigned GetTGExpanders (void) const;
+	unsigned GetTGExpanderStart (void) const;
 
 	// MIDI
 	unsigned GetMIDIBaudRate (void) const;
@@ -174,6 +182,8 @@ private:
 	unsigned m_nDACI2CAddress;
 	bool m_bChannelsSwapped;
 	unsigned m_EngineType;
+	unsigned m_nTGExpanders;
+	unsigned m_nTGExpanderStart;
 
 	unsigned m_nMIDIBaudRate;
 	std::string m_MIDIThruIn;

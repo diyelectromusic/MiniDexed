@@ -58,6 +58,14 @@ LOGMODULE ("mididevice");
 #define MIDI_TIMING_CLOCK	0xF8
 #define MIDI_ACTIVE_SENSING	0xFE
 
+#define MIDI_SYSTEM_EXCLUSIVE_UNRT	0x7E	// Universal Non-Real-time Messages
+#define MIDI_SYSTEM_EXCLUSIVE_URT	0x7F	// Universal Real-time Messages
+#define MIDI_SYSTEM_EXCLUSIVE_URT_DEVICE_CONTROL	0x04
+#define MIDI_SYSTEM_EXCLUSIVE_URT_MASTER_VOLUME		0x01
+
+#define MIDI_SYSTEM_EXCLUSIVE_TG_MSG	0x7D	// Manufacturers ID reserved for internal and educational purposes
+#define MIDI_SYSTEM_EXCLUSIVE_TG_MSG_LEN MD_PARAM_MSG_LEN		// Bespoke message for MiniDexed to MiniDexed parameter transfer
+
 CMIDIDevice::TDeviceMap CMIDIDevice::s_DeviceMap;
 
 CMIDIDevice::CMIDIDevice (CMiniDexed *pSynthesizer, CConfig *pConfig, CUserInterface *pUI)
@@ -175,11 +183,23 @@ void CMIDIDevice::MIDIMessageHandler (const u8 *pMessage, size_t nLength, unsign
 	u8 ucType    = ucStatus >> 4;
 
 	// GLOBAL MIDI SYSEX
-	if (pMessage[0] == MIDI_SYSTEM_EXCLUSIVE_BEGIN && pMessage[3] == 0x04 &&  pMessage[4] == 0x01 && pMessage[nLength-1] == MIDI_SYSTEM_EXCLUSIVE_END) // MASTER VOLUME
+	if (pMessage[0] == MIDI_SYSTEM_EXCLUSIVE_BEGIN &&
+		pMessage[1] == MIDI_SYSTEM_EXCLUSIVE_URT &&
+		pMessage[3] == MIDI_SYSTEM_EXCLUSIVE_URT_DEVICE_CONTROL &&
+		pMessage[4] == MIDI_SYSTEM_EXCLUSIVE_URT_MASTER_VOLUME &&
+		pMessage[nLength-1] == MIDI_SYSTEM_EXCLUSIVE_END) // MASTER VOLUME
 	{
 		float32_t nMasterVolume=((pMessage[5] & 0x7c) & ((pMessage[6] & 0x7c) <<7))/(1<<14);
 		LOGNOTE("Master volume: %f",nMasterVolume);
 		m_pSynthesizer->setMasterVolume(nMasterVolume);
+	}
+	else if (pMessage[0] == MIDI_SYSTEM_EXCLUSIVE_BEGIN &&
+			 pMessage[1] == MIDI_SYSTEM_EXCLUSIVE_TG_MSG &&
+			 nLength == MIDI_SYSTEM_EXCLUSIVE_TG_MSG_LEN &&
+			 pMessage[nLength-1] == MIDI_SYSTEM_EXCLUSIVE_END)
+	{
+		// MiniDexed to MiniDexed Parameter transfer
+		m_pSynthesizer->remoteTGRecv(pMessage, nLength);
 	}
 	else
 	{

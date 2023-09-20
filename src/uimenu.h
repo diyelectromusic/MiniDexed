@@ -127,6 +127,7 @@ private:
 private:
 	CUserInterface *m_pUI;
 	CMiniDexed *m_pMiniDexed;
+	unsigned m_nRemoteExpanders;
 
 	const TMenuItem *m_pParentMenu;
 	const TMenuItem *m_pCurrentMenu;
@@ -144,6 +145,7 @@ private:
 	static const TMenuItem s_MenuRoot[];
 	static const TMenuItem s_MainMenu[];
 	static const TMenuItem s_TGMenu[];
+	static const TMenuItem s_TGExpMenu[];
 	static const TMenuItem s_EffectsMenu[];
 	static const TMenuItem s_ReverbMenu[];
 	static const TMenuItem s_EditVoiceMenu[];

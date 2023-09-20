@@ -47,13 +47,26 @@ void CConfig::Load (void)
 	m_nDACI2CAddress = m_Properties.GetNumber ("DACI2CAddress", 0);
 	m_bChannelsSwapped = m_Properties.GetNumber ("ChannelsSwapped", 0) != 0;
 
-		unsigned newEngineType = m_Properties.GetNumber ("EngineType", 1);
+	unsigned newEngineType = m_Properties.GetNumber ("EngineType", 1);
 	if (newEngineType == 2) {
   		m_EngineType = MKI;
 	} else if (newEngineType == 3) {
   		m_EngineType = OPL;
 	} else {
   		m_EngineType = MSFA;
+	}
+	
+	m_nTGExpanders = m_Properties.GetNumber ("TGExpanders", 0);
+	m_nTGExpanderStart = m_Properties.GetNumber ("TGExpanderStart", 0);
+	if (m_nTGExpanderStart == 0)
+	{
+		// Disable expanders
+		m_nTGExpanders = 0;
+	}
+	if (m_nTGExpanders > TGExpanders)
+	{
+		// Cap number of expanders at max hardware can support
+		m_nTGExpanders = TGExpanders;
 	}
 
 	m_nMIDIBaudRate = m_Properties.GetNumber ("MIDIBaudRate", 31250);
@@ -180,6 +193,16 @@ bool CConfig::GetChannelsSwapped (void) const
 unsigned CConfig::GetEngineType (void) const
 {
 	return m_EngineType;
+}
+
+unsigned CConfig::GetTGExpanders (void) const
+{
+	return m_nTGExpanders;
+}
+
+unsigned CConfig::GetTGExpanderStart (void) const
+{
+	return m_nTGExpanderStart;
 }
 
 unsigned CConfig::GetMIDIBaudRate (void) const

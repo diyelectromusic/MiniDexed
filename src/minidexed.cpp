@@ -37,6 +37,8 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 	CMultiCoreSupport (CMemorySystem::Get ()),
 #endif
 	m_pConfig (pConfig),
+	m_nRemoteTGExpanders (pConfig->GetTGExpanders()),
+	m_nRemoteTGExpanderStart (pConfig->GetTGExpanderStart()),
 	m_UI (this, pGPIOManager, pI2CMaster, pConfig),
 	m_PerformanceConfig (pFileSystem),
 	m_PCKeyboard (this, pConfig, &m_UI),
@@ -58,10 +60,16 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 {
 	assert (m_pConfig);
 
-	for (unsigned i = 0; i < CConfig::ToneGenerators; i++)
+	LOGNOTE("Tone Generators = %d", CConfig::ToneGenerators);
+	LOGNOTE("Remote Tone Generators = %d", m_nRemoteTGExpanders);
+	LOGNOTE("Tone Generators on this device = %d to %d", m_nRemoteTGExpanderStart, m_nRemoteTGExpanderStart+CConfig::ToneGenerators-1);
+
+	for (unsigned i = 0; i < CConfig::AllToneGenerators; i++)
 	{
+		// Initialise all real and remote TGs
 		m_nVoiceBankID[i] = 0;
 		m_nVoiceBankIDMSB[i] = 0;
+		m_nVoiceBankIDLSB[i] = 0;
 		m_nProgram[i] = 0;
 		m_nVolume[i] = 100;
 		m_nPan[i] = 64;
@@ -89,13 +97,18 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 		m_nAftertouchTarget[i]=0;
 		
 		m_nReverbSend[i] = 0;
-		m_uchOPMask[i] = 0b111111;	// All operators on
-
-		m_pTG[i] = new CDexedAdapter (CConfig::MaxNotes, pConfig->GetSampleRate ());
-		assert (m_pTG[i]);
 		
-		m_pTG[i]->setEngineType(pConfig->GetEngineType ());
-		m_pTG[i]->activate ();
+		// Now activate all real TGs
+		if (i < CConfig::ToneGenerators)
+		{
+			m_uchOPMask[i] = 0b111111;	// All operators on
+
+			m_pTG[i] = new CDexedAdapter (CConfig::MaxNotes, pConfig->GetSampleRate ());
+			assert (m_pTG[i]);
+
+			m_pTG[i]->setEngineType(pConfig->GetEngineType ());
+			m_pTG[i]->activate ();
+		}
 	}
 
 	for (unsigned i = 0; i < CConfig::MaxUSBMIDIDevices; i++)
@@ -196,6 +209,8 @@ bool CMiniDexed::Initialize (void)
 		LOGNOTE("Program Change: Disabled");
 	}
 
+	// Set initial configuration for all real TGs.
+	// Note: the "remote" MiniDexed will do this for all remote TGs.
 	for (unsigned i = 0; i < CConfig::ToneGenerators; i++)
 	{
 		assert (m_pTG[i]);
@@ -383,6 +398,56 @@ CSysExFileLoader *CMiniDexed::GetSysExFileLoader (void)
 	return &m_SysExFileLoader;
 }
 
+// Notes on MiniDexed parameter handling and real and remote TGs:
+//   Almost all functions in this file will act on the real TGs only.
+//
+//   The only functions that "know" about remote TGs are
+//     SetParameter()
+//     SetTGParameter()
+//
+//   The number of remote expanders is defined by the RPI version
+//   and is set in CConfig::TGExpanders but it can be overridden
+//   to a lower number using the configuration file.
+//
+//   The default, i.e. nothing in the config file, is 0.
+//
+//   All functions working with real TGs only should check against
+//   CConfig::ToneGenerators.
+//
+//   All functions working with real and remote TGs should check
+//   against CConfig::AllToneGenerators but work with the number
+//   given by m_nRemoteTGExpanders when targetting remote TGs.
+//
+//   These will pass any SetxxParameter calls for remote
+//   TGs off to the remote MiniDexed.
+//
+//   When commands for a remote TG come in, they will be translated
+//   across to the local real TG it responds too.
+//
+//   All values are cached here though, so the Getxx functions
+//   return local cached values, not the true remote values.
+//
+// The assumptions/limitations behind this are as follows:
+// - Both MiniDexed instances will have exactly the same
+//   banks, voices and performances installed.
+// - There is no acknowledgement of Set commands.
+// - Only a unidirection link is required between the
+//   real and remote MiniDexed.
+// - Both systems will respond to MIDI commands.
+// - There is no UI on the remote MiniDexed to get
+//   significantly out of sync, but using MIDI commands
+//   might still allow it to happen.
+
+unsigned CMiniDexed::getRemoteTGExpanders (void)
+{
+	return m_nRemoteTGExpanders;
+}
+
+unsigned CMiniDexed::getRemoteTGExpanderStart (void)
+{
+	return m_nRemoteTGExpanderStart;
+}
+
 void CMiniDexed::BankSelect (unsigned nBank, unsigned nTG)
 {
 	nBank=constrain((int)nBank,0,16383);
@@ -418,6 +483,7 @@ void CMiniDexed::BankSelectLSB (unsigned nBankLSB, unsigned nTG)
 	nBankLSB=constrain((int)nBankLSB,0,127);
 
 	assert (nTG < CConfig::ToneGenerators);
+	m_nVoiceBankIDLSB[nTG] = nBankLSB;
 	unsigned nBank = m_nVoiceBankID[nTG];
 	unsigned nBankMSB = m_nVoiceBankIDMSB[nTG];
 	nBank = (nBankMSB << 7) + nBankLSB;
@@ -725,8 +791,25 @@ void CMiniDexed::SetParameter (TParameter Parameter, int nValue)
 {
 	assert (reverb);
 
+	if ((m_nRemoteTGExpanders == 0) && (m_nRemoteTGExpanderStart>CConfig::ToneGenerators) && (Parameter > ParameterUnknown))
+	{
+		// Received a parameter from main TG that might need special handling...
+		if (Parameter == GLOBAL_PARAMETER_PERFORMANCE)
+		{
+			SetNewPerformance(nValue);
+			return;
+		}
+	}
+
 	assert (Parameter < ParameterUnknown);
 	m_nParameter[Parameter] = nValue;
+
+	if ((m_nRemoteTGExpanders > 0) && (m_nRemoteTGExpanderStart==1))
+	{
+		// Pass parameter change on to remote TGs too.
+		//LOGNOTE("SetParameter: Sending to remote %d=%d", Parameter, nValue);
+		remoteTGSend (GLOBAL_PARAMETER_TG, (unsigned)Parameter, nValue);
+	}
 
 	switch (Parameter)
 	{
@@ -805,7 +888,23 @@ int CMiniDexed::GetParameter (TParameter Parameter)
 
 void CMiniDexed::SetTGParameter (TTGParameter Parameter, int nValue, unsigned nTG)
 {
-	assert (nTG < CConfig::ToneGenerators);
+	assert (nTG < CConfig::AllToneGenerators);
+
+	if (nTG >= CConfig::ToneGenerators)
+	{
+		// Cache the value for further retrieval
+		SetTGExpanderParameter(Parameter, nValue, nTG);
+
+		if ((m_nRemoteTGExpanders > 0) && (m_nRemoteTGExpanderStart==1))
+		{
+			// Pass parameter change on to remote TGs.
+			//LOGNOTE("SetTGParameter: Sending to remote TG%d %d=%d", nTG+1, Parameter, nValue);
+			remoteTGSend (nTG, (unsigned)Parameter, nValue);
+		}
+
+		// No further processing for remote TGs
+		return;
+	}
 
 	switch (Parameter)
 	{
@@ -858,9 +957,64 @@ void CMiniDexed::SetTGParameter (TTGParameter Parameter, int nValue, unsigned nT
 	}
 }
 
+void CMiniDexed::SetTGExpanderParameter (TTGParameter Parameter, int nValue, unsigned nTG)
+{
+	assert (nTG < CConfig::AllToneGenerators);
+
+	if (nTG >= CConfig::ToneGenerators)
+	{
+		switch (Parameter)
+		{
+		case TGParameterVoiceBank:		m_nVoiceBankID[nTG] = nValue;	break;
+		case TGParameterVoiceBankMSB:	m_nVoiceBankIDMSB[nTG] = nValue;	break;
+		case TGParameterVoiceBankLSB:	m_nVoiceBankID[nTG] = (m_nVoiceBankIDMSB[nTG] << 7) + (nValue & 0x7F);	break;
+		case TGParameterProgram:		m_nProgram[nTG] = nValue;	break;
+		case TGParameterVolume:			m_nVolume[nTG] = nValue;	break;
+		case TGParameterPan:			m_nPan[nTG] = nValue;	break;
+		case TGParameterMasterTune:		m_nMasterTune[nTG] = nValue;	break;
+		case TGParameterCutoff:			m_nCutoff[nTG] = nValue;	break;
+		case TGParameterResonance:		m_nResonance[nTG] = nValue;	break;
+		case TGParameterPitchBendRange:	m_nPitchBendRange[nTG] = nValue;	break;
+		case TGParameterPitchBendStep:	m_nPitchBendStep[nTG] = nValue;	break;
+		case TGParameterPortamentoMode:	m_nPortamentoMode[nTG] = nValue;	break;
+		case TGParameterPortamentoGlissando:	m_nPortamentoGlissando[nTG] = nValue;	break;
+		case TGParameterPortamentoTime:	m_nPortamentoTime[nTG] = nValue;	break;
+		case TGParameterMonoMode:		m_bMonoMode[nTG] = (nValue!=0);	break;
+
+		case TGParameterMWRange:		setModController(0, 0, nValue, nTG); break;
+		case TGParameterMWPitch:		setModController(0, 1, nValue, nTG); break;
+		case TGParameterMWAmplitude:	setModController(0, 2, nValue, nTG); break;
+		case TGParameterMWEGBias:		setModController(0, 3, nValue, nTG); break;
+
+		case TGParameterFCRange:		setModController(1, 0, nValue, nTG); break;
+		case TGParameterFCPitch:		setModController(1, 1, nValue, nTG); break;
+		case TGParameterFCAmplitude:	setModController(1, 2, nValue, nTG); break;
+		case TGParameterFCEGBias:		setModController(1, 3, nValue, nTG); break;
+
+		case TGParameterBCRange:		setModController(2, 0, nValue, nTG); break;
+		case TGParameterBCPitch:		setModController(2, 1, nValue, nTG); break;
+		case TGParameterBCAmplitude:	setModController(2, 2, nValue, nTG); break;
+		case TGParameterBCEGBias:		setModController(2, 3, nValue, nTG); break;
+
+		case TGParameterATRange:		setModController(3, 0, nValue, nTG); break;
+		case TGParameterATPitch:		setModController(3, 1, nValue, nTG); break;
+		case TGParameterATAmplitude:	setModController(3, 2, nValue, nTG); break;
+		case TGParameterATEGBias:		setModController(3, 3, nValue, nTG); break;
+
+		case TGParameterMIDIChannel:	m_nMIDIChannel[nTG] = nValue;	break;
+
+		case TGParameterReverbSend:	m_nReverbSend[nTG] = nValue;	break;
+
+		default:
+			assert (0);
+			break;
+		}
+	}
+}
+
 int CMiniDexed::GetTGParameter (TTGParameter Parameter, unsigned nTG)
 {
-	assert (nTG < CConfig::ToneGenerators);
+	assert (nTG < CConfig::AllToneGenerators);
 
 	switch (Parameter)
 	{
@@ -966,16 +1120,24 @@ uint8_t CMiniDexed::GetVoiceParameter (uint8_t uchOffset, unsigned nOP, unsigned
 
 std::string CMiniDexed::GetVoiceName (unsigned nTG)
 {
-	char VoiceName[11];
-	memset (VoiceName, 0, sizeof VoiceName);
-
-	assert (nTG < CConfig::ToneGenerators);
-	assert (m_pTG[nTG]);
-	m_pTG[nTG]->setName (VoiceName);
-
-	std::string Result (VoiceName);
-
-	return Result;
+	if (nTG < CConfig::ToneGenerators)
+	{
+		// Grab the "live" name from the loaded voice
+		char VoiceName[11];
+		memset (VoiceName, 0, sizeof VoiceName);
+		
+		assert (m_pTG[nTG]);
+		m_pTG[nTG]->setName (VoiceName);
+		std::string Result (VoiceName);
+		
+		return Result;
+	}
+	else
+	{
+		// Determine the name from the cached "loaded" sound on the remote TG
+		assert (nTG < CConfig::AllToneGenerators);
+		return GetSysExFileLoader()->GetVoiceName(m_nVoiceBankID[nTG], m_nProgram[nTG]);
+	}
 }
 
 #ifndef ARM_ALLOW_MULTI_CORE
@@ -1506,6 +1668,12 @@ bool CMiniDexed::SetNewPerformance(unsigned nID)
 {
 	m_bSetNewPerformance = true;
 	m_nSetNewPerformanceID = nID;
+	
+	if ((m_nRemoteTGExpanders > 0) && (m_nRemoteTGExpanderStart==1))
+	{
+		// Pass parameter change on to remote TGs too.
+		remoteTGSend (GLOBAL_PARAMETER_TG, GLOBAL_PARAMETER_PERFORMANCE, nID);
+	}
 
 	return true;
 }
@@ -1792,4 +1960,95 @@ unsigned CMiniDexed::getModController (unsigned controller, unsigned parameter, 
 		break;
 	}
 	
+}
+
+
+// MiniDexed SysEx Parameter Message Format
+//   F0 7D tg pp d1 d2 F7
+//
+//     tg = 0 to 15 for TG number (1-16), or 16 for Global Parameters
+//     pp = Parameter number
+//     d1 = 14-bit data value (MSB)
+//     d2 = 14-bit data value (LSB)
+//
+void CMiniDexed::remoteTGSend (unsigned nTG, unsigned nParameter, int nValue)
+{
+	// Construct a SysEx message and send it
+	uint8_t msg[MD_PARAM_MSG_LEN];
+	msg[0] = 0xF0; // SysEx start
+	msg[1] = 0x7D; // Manufacturer ID = Internal/Educational Use ID
+	msg[MD_PARAM_MSG_LEN-1] = 0xF7; // SysEx end
+
+	if (nTG < 16)
+	{
+		msg[2] = nTG;  // Either TG number (0-F)
+	} else {
+		msg[2] = 0x10; // or "Global" = 0x10
+	}
+
+	// Encode the Parameter and nValue data as follows:
+	//   Parameter = 0..127
+	//   nValue    = 0..16383 (binary 00aa aaaa abbb bbbb)
+	//
+	//   msg3 = 0ppp pppp
+	//   msg5 = 0aaa aaaa
+	//   msg6 = 0bbb bbbb
+	if (nParameter < 128)
+	{
+		unsigned nTemp = (unsigned)nValue;
+		msg[3] = nParameter;
+		msg[4] = (nTemp >> 7);
+		msg[5] = nTemp & 0x7F;
+
+		//printf("remoteTGSend: %02X %02X %02X %02X %02X %02X %02X\n", msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6]);
+		m_SerialMIDI.Send(msg, MD_PARAM_MSG_LEN, 0);
+	}
+}
+
+void CMiniDexed::remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength)
+{
+	// Check a SysEx message and decode and act on it
+	if (nLength == MD_PARAM_MSG_LEN)
+	{
+		if ((pMessage[0] == 0xF0) && (pMessage[1] == 0x7D) && (pMessage[MD_PARAM_MSG_LEN-1] == 0xF7) &&
+			(pMessage[2] <= GLOBAL_PARAMETER_TG) && (pMessage[4] < 128) && (pMessage[5] < 128))
+		{
+			//printf("remoteTGRecv: %02X %02X %02X %02X %02X %02X %02X\n", pMessage[0], pMessage[1], pMessage[2], pMessage[3], pMessage[4], pMessage[5], pMessage[6]);
+			unsigned nTG = pMessage[2];
+			unsigned nParameter = pMessage[3];
+			unsigned nTemp = (pMessage[4]<<7) + pMessage[5];
+
+			if (nTG < CConfig::ToneGenerators)
+			{
+				// Real TG Parameter
+				TTGParameter Parameter = (TTGParameter)nParameter;
+				int nValue = (int)nTemp;
+				SetTGParameter(Parameter, nValue, nTG);
+			}
+			else if ((nTG < CConfig::AllToneGenerators) && (nTG >= CConfig::ToneGenerators))
+			{
+				if (m_nRemoteTGExpanderStart > 8)
+				{
+					// Expanded TG Parameter
+					TTGParameter Parameter = (TTGParameter)nParameter;
+					int nValue = (int)nTemp;
+
+					// Translate over to "real" TG numbers
+					nTG = nTG - 8;
+					SetTGParameter(Parameter, nValue, nTG);				
+				}
+			}
+			else if (nTG == GLOBAL_PARAMETER_TG)
+			{
+				// Global Parameter
+				TParameter Parameter = (TParameter)nParameter;
+				int nValue = (int)nTemp;
+				SetParameter(Parameter, nValue);				
+			}
+			else
+			{
+				// Don't know what scope it is for, so ignore
+			}
+		}
+	}
 }
