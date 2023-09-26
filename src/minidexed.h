@@ -206,8 +206,9 @@ public:
 #define MD_PARAM_MSG_LEN 7
 	void remoteTGSend (unsigned nTG, unsigned nParameter, int nValue);
 	void remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength);
-	unsigned getRemoteTGExpanders (void);
-	unsigned getRemoteTGExpanderStart (void);
+	unsigned getTGLocal (void);
+	unsigned getTGRemote (void);
+	unsigned getTGLocalStart (void);
 
 	// access (global or OP-related) parameter of the active voice of a TG
 	static const unsigned NoOP = 6;		// for global parameters
@@ -241,12 +242,13 @@ private:
 private:
 	CConfig *m_pConfig;
 	
-	unsigned m_nRemoteTGExpanders;
-	unsigned m_nRemoteTGExpanderStart;
+	unsigned m_nTGLocal;
+	unsigned m_nTGRemote;
+	unsigned m_nTGLocalStart;
 
 	int m_nParameter[ParameterUnknown];			// global (non-TG) parameters
 
-	CDexedAdapter *m_pTG[CConfig::CConfig::ToneGenerators];
+	CDexedAdapter *m_pTG[CConfig::ToneGenerators];
 
 	unsigned m_nVoiceBankID[CConfig::AllToneGenerators];
 	unsigned m_nVoiceBankIDMSB[CConfig::AllToneGenerators];
@@ -299,7 +301,7 @@ private:
 	unsigned m_nQueueSizeFrames;
 
 #ifdef ARM_ALLOW_MULTI_CORE
-	unsigned m_nActiveTGsLog2;
+//	unsigned m_nActiveTGsLog2;
 	volatile TCoreStatus m_CoreStatus[CORES];
 	volatile unsigned m_nFramesToProcess;
 	float32_t m_OutputLevel[CConfig::ToneGenerators][CConfig::MaxChunkSize];

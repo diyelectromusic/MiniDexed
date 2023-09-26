@@ -31,20 +31,50 @@
 class CConfig		// Configuration for MiniDexed
 {
 public:
+	// These provide the actual TGs as per the run-time configuration
+	unsigned GetToneGenerators (void);
+	unsigned GetTGExpanders (void);
+	unsigned GetAllToneGenerators (void);
+	unsigned GetTGsCore1 (void);
+	unsigned GetTGsCore23 (void);
+
+	// These constants define the maximum configuration as per the build-time configuration
 #ifndef ARM_ALLOW_MULTI_CORE
-	#define TG_EXPANDERS 1
+	// Pi V1 or Zero (single core)
+	#define TG_EXPANDERS 1 // Max number of remote TGs (Optional)
+	static const unsigned TGsCore1 = 0;
+	static const unsigned TGsCore23 = 0;
+	static const unsigned TGsCore1Exp = 0;
+	static const unsigned TGsCore23Exp = 0;
 	static const unsigned ToneGenerators = 1;
 	static const unsigned TGExpanders = TG_EXPANDERS;
 	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
 #else
-	#define TG_EXPANDERS 8
+#if RASPPI==4
+	// Pi 4 quad core
+	// These are max values, default is to support 8 in total with optional 16 TGs
+	#define TG_EXPANDERS 0 // Max number of remote TGs (Optional)
 	static const unsigned TGsCore1 = 2;		// process 2 TGs on core 1
 	static const unsigned TGsCore23 = 3;		// process 3 TGs on core 2 and 3 each
-	static const unsigned ToneGenerators = TGsCore1 + 2*TGsCore23;
+	static const unsigned TGsCore1Exp = 2;		// process optional additional 2 TGs on core 1
+	static const unsigned TGsCore23Exp = 3;		// process optional additional 3 TGs on core 2 and 3 each
+	static const unsigned ToneGenerators = TGsCore1 + TGsCore1Exp + 2*TGsCore23 + 2*TGsCore23Exp;
+	static const unsigned TGExpanders = TG_EXPANDERS;
+	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
+#else
+	// Pi 2 or 3 quad core
+	#define TG_EXPANDERS 8 // Max number of remote TGs (Optional)
+	static const unsigned TGsCore1 = 2;		// process 2 TGs on core 1
+	static const unsigned TGsCore23 = 3;		// process 3 TGs on core 2 and 3 each
+	static const unsigned TGsCore1Exp = 0;
+	static const unsigned TGsCore23Exp = 0;
+	static const unsigned ToneGenerators = TGsCore1 + TGsCore1Exp + 2*TGsCore23 + 2*TGsCore23Exp;
 	static const unsigned TGExpanders = TG_EXPANDERS;
 	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
 #endif
+#endif
 
+public:
 #if RASPPI == 1
 	static const unsigned MaxNotes = 8;		// polyphony
 #else
@@ -76,8 +106,9 @@ public:
 	unsigned GetDACI2CAddress (void) const;		// 0 for auto probing
 	bool GetChannelsSwapped (void) const;
 	unsigned GetEngineType (void) const;
-	unsigned GetTGExpanders (void) const;
-	unsigned GetTGExpanderStart (void) const;
+	unsigned GetTGLocal (void) const;
+	unsigned GetTGRemote (void) const;
+	unsigned GetTGLocalStart (void) const;
 
 	// MIDI
 	unsigned GetMIDIBaudRate (void) const;
@@ -182,8 +213,9 @@ private:
 	unsigned m_nDACI2CAddress;
 	bool m_bChannelsSwapped;
 	unsigned m_EngineType;
-	unsigned m_nTGExpanders;
-	unsigned m_nTGExpanderStart;
+	unsigned m_nTGLocal;
+	unsigned m_nTGRemote;
+	unsigned m_nTGLocalStart;
 
 	unsigned m_nMIDIBaudRate;
 	std::string m_MIDIThruIn;

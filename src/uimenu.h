@@ -127,7 +127,8 @@ private:
 private:
 	CUserInterface *m_pUI;
 	CMiniDexed *m_pMiniDexed;
-	unsigned m_nRemoteExpanders;
+	unsigned m_nTGLocal;
+	unsigned m_nTGRemote;
 
 	const TMenuItem *m_pParentMenu;
 	const TMenuItem *m_pCurrentMenu;

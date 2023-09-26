@@ -52,18 +52,29 @@ const CUIMenu::TMenuItem CUIMenu::s_MainMenu[] =
 	{"TG7",		MenuHandler,	s_TGMenu, 6},
 	{"TG8",		MenuHandler,	s_TGMenu, 7},
 #endif
+#if (RASPPI==4)
+	{"TG9",		MenuHandler,	s_TGMenu, 8},
+	{"TG10",	MenuHandler,	s_TGMenu, 9},
+	{"TG11",	MenuHandler,	s_TGMenu, 10},
+	{"TG12",	MenuHandler,	s_TGMenu, 11},
+	{"TG13",	MenuHandler,	s_TGMenu, 12},
+	{"TG14",	MenuHandler,	s_TGMenu, 13},
+	{"TG15",	MenuHandler,	s_TGMenu, 14},
+	{"TG16",	MenuHandler,	s_TGMenu, 15},
+#else // RASPPI!=4
 #if (TG_EXPANDERS>0)
 	{"TG9",		MenuHandler,	s_TGExpMenu, 8},
 #endif
 #if (TG_EXPANDERS>1)
-	{"TG10",		MenuHandler,	s_TGExpMenu, 9},
-	{"TG11",		MenuHandler,	s_TGExpMenu, 10},
-	{"TG12",		MenuHandler,	s_TGExpMenu, 11},
-	{"TG13",		MenuHandler,	s_TGExpMenu, 12},
-	{"TG14",		MenuHandler,	s_TGExpMenu, 13},
-	{"TG15",		MenuHandler,	s_TGExpMenu, 14},
-	{"TG16",		MenuHandler,	s_TGExpMenu, 15},
+	{"TG10",	MenuHandler,	s_TGExpMenu, 9},
+	{"TG11",	MenuHandler,	s_TGExpMenu, 10},
+	{"TG12",	MenuHandler,	s_TGExpMenu, 11},
+	{"TG13",	MenuHandler,	s_TGExpMenu, 12},
+	{"TG14",	MenuHandler,	s_TGExpMenu, 13},
+	{"TG15",	MenuHandler,	s_TGExpMenu, 14},
+	{"TG16",	MenuHandler,	s_TGExpMenu, 15},
 #endif
+#endif // RASPPI==4
 	{"Effects",	MenuHandler,	s_EffectsMenu},
 	{"Performance",	MenuHandler, s_PerformanceMenu}, 
 	{0}
@@ -368,7 +379,8 @@ const CUIMenu::TMenuItem CUIMenu::s_PerformanceMenu[] =
 CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed)
 :	m_pUI (pUI),
 	m_pMiniDexed (pMiniDexed),
-	m_nRemoteExpanders (0),
+	m_nTGLocal (0),
+	m_nTGRemote (0),
 	m_pParentMenu (s_MenuRoot),
 	m_pCurrentMenu (s_MainMenu),
 	m_nCurrentMenuItem (0),
@@ -376,7 +388,8 @@ CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed)
 	m_nCurrentParameter (0),
 	m_nCurrentMenuDepth (0)
 {
-	m_nRemoteExpanders = pMiniDexed->getRemoteTGExpanders();
+	m_nTGLocal = pMiniDexed->getTGLocal();
+	m_nTGRemote = pMiniDexed->getTGRemote();
 
 #ifndef ARM_ALLOW_MULTI_CORE
 	// If there is just one core, then there is only a single
@@ -492,13 +505,20 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 			pUIMenu->m_nCurrentSelection--;
 		}
 		// Need a special case to adjust the Main Menu for TG Expanders
-		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nRemoteExpanders==0))
+		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nTGRemote==0))
 		{
 			// Keep skipping over the TGExpander Menu
 			while ((pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) && (pUIMenu->m_nCurrentSelection > 0))
 			{
 				pUIMenu->m_nCurrentSelection--;
 			}
+		}
+		// Also might need to trim menu if local TGs is configured to be less than the maximum supported
+		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal))
+		{
+			pUIMenu->m_nCurrentSelection--;
 		}
 		break;
 
@@ -509,13 +529,21 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 			pUIMenu->m_nCurrentSelection--;
 		}
 		// Need a special case to adjust the Main Menu for TG Expanders
-		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nRemoteExpanders==0))
+		if ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nTGRemote==0))
 		{
 			// Keep skipping over the TGExpander Menu
 			while ((pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) && (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name))
 			{
 				pUIMenu->m_nCurrentSelection++;
 			}
+		}
+		// Also might need to trim menu if local TGs is configured to be less than the maximum supported
+		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name))
+		{
+			pUIMenu->m_nCurrentSelection++;
 		}
 		break;
 

@@ -55,18 +55,28 @@ void CConfig::Load (void)
 	} else {
   		m_EngineType = MSFA;
 	}
-	
-	m_nTGExpanders = m_Properties.GetNumber ("TGExpanders", 0);
-	m_nTGExpanderStart = m_Properties.GetNumber ("TGExpanderStart", 0);
-	if (m_nTGExpanderStart == 0)
+
+#ifdef ARM_ALLOW_MULTI_CORE
+	m_nTGLocal = m_Properties.GetNumber ("TGLocal", 8);
+#else
+	m_nTGLocal = m_Properties.GetNumber ("TGLocal", 1);
+#endif
+	if (m_nTGLocal > ToneGenerators)
 	{
-		// Disable expanders
-		m_nTGExpanders = 0;
+		m_nTGLocal = ToneGenerators;
 	}
-	if (m_nTGExpanders > TGExpanders)
+	m_nTGRemote = m_Properties.GetNumber ("TGRemote", 0);
+	if (m_nTGRemote > TGExpanders)
 	{
 		// Cap number of expanders at max hardware can support
-		m_nTGExpanders = TGExpanders;
+		m_nTGRemote = TGExpanders;
+	}
+	assert (m_nTGLocal + m_nTGRemote <= AllToneGenerators);
+	m_nTGLocalStart = m_Properties.GetNumber ("TGLocalStart", 1);
+	if (m_nTGLocalStart > AllToneGenerators)
+	{
+		// Default to first block of TGs
+		m_nTGLocalStart = 1;
 	}
 
 	m_nMIDIBaudRate = m_Properties.GetNumber ("MIDIBaudRate", 31250);
@@ -165,6 +175,31 @@ void CConfig::Load (void)
 	m_bPerformanceSelectChannel = m_Properties.GetNumber ("PerformanceSelectChannel", 0);
 }
 
+unsigned CConfig::GetToneGenerators (void)
+{
+	return m_nTGLocal;
+}
+
+unsigned CConfig::GetTGExpanders (void)
+{
+	return TGExpanders;
+}
+
+unsigned CConfig::GetAllToneGenerators (void)
+{
+	return m_nTGLocal + m_nTGRemote;
+}
+
+unsigned CConfig::GetTGsCore1 (void)
+{
+	return TGsCore1;
+}
+
+unsigned CConfig::GetTGsCore23 (void)
+{
+	return TGsCore23;
+}
+
 const char *CConfig::GetSoundDevice (void) const
 {
 	return m_SoundDevice.c_str ();
@@ -195,14 +230,19 @@ unsigned CConfig::GetEngineType (void) const
 	return m_EngineType;
 }
 
-unsigned CConfig::GetTGExpanders (void) const
+unsigned CConfig::GetTGLocal (void) const
 {
-	return m_nTGExpanders;
+	return m_nTGLocal;
 }
 
-unsigned CConfig::GetTGExpanderStart (void) const
+unsigned CConfig::GetTGRemote (void) const
 {
-	return m_nTGExpanderStart;
+	return m_nTGRemote;
+}
+
+unsigned CConfig::GetTGLocalStart (void) const
+{
+	return m_nTGLocalStart;
 }
 
 unsigned CConfig::GetMIDIBaudRate (void) const
