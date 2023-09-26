@@ -376,9 +376,10 @@ const CUIMenu::TMenuItem CUIMenu::s_PerformanceMenu[] =
 };
 
 
-CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed)
+CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed, CConfig *pConfig)
 :	m_pUI (pUI),
 	m_pMiniDexed (pMiniDexed),
+	m_pConfig (pConfig),
 	m_nTGLocal (0),
 	m_nTGRemote (0),
 	m_pParentMenu (s_MenuRoot),
@@ -516,7 +517,9 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 		// Also might need to trim menu if local TGs is configured to be less than the maximum supported
 		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
 			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal))
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators) &&
+			   (pUIMenu->m_nCurrentSelection > 0))
 		{
 			pUIMenu->m_nCurrentSelection--;
 		}
@@ -541,6 +544,7 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
 			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
 			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
+			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators) &&
 			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name))
 		{
 			pUIMenu->m_nCurrentSelection++;
@@ -1320,10 +1324,10 @@ void CUIMenu::PgmUpDownHandler (TMenuEvent Event)
 		// If we're not in the root menu, then see if we are already in a TG menu,
 		// then find the current TG number. Otherwise assume TG1 (nTG=0).
 		unsigned nTG = 0;
-		if (m_MenuStackMenu[0] == s_MainMenu && (m_pCurrentMenu == s_TGMenu) || (m_MenuStackMenu[1] == s_TGMenu)) {
+		if (m_MenuStackMenu[0] == s_MainMenu && (m_pCurrentMenu == s_TGMenu || m_pCurrentMenu == s_TGExpMenu) || (m_MenuStackMenu[1] == s_TGMenu || m_MenuStackMenu[1] == s_TGExpMenu)) {
 			nTG = m_nMenuStackSelection[0];
 		}
-		assert (nTG < CConfig::ToneGenerators);
+		assert (nTG < CConfig::AllToneGenerators);
 
 		int nPgm = m_pMiniDexed->GetTGParameter (CMiniDexed::TGParameterProgram, nTG);
 
@@ -1378,31 +1382,41 @@ void CUIMenu::TGUpDownHandler (TMenuEvent Event)
 	// This will update the menus to position it for the next TG up or down
 	unsigned nTG = 0;
 	
-	if (CConfig::ToneGenerators <= 1) {
+	if (CConfig::AllToneGenerators <= 1) {
 		// Nothing to do if only a single TG
 		return;
 	}
 
 	// If we're not in the root menu, then see if we are already in a TG menu,
 	// then find the current TG number. Otherwise assume TG1 (nTG=0).
-	if (m_MenuStackMenu[0] == s_MainMenu && (m_pCurrentMenu == s_TGMenu) || (m_MenuStackMenu[1] == s_TGMenu)) {
+	if (m_MenuStackMenu[0] == s_MainMenu && (m_pCurrentMenu == s_TGMenu || m_pCurrentMenu == s_TGExpMenu) || (m_MenuStackMenu[1] == s_TGMenu || m_MenuStackMenu[1] == s_TGExpMenu)) {
 		nTG = m_nMenuStackSelection[0];
 	}
 
-	assert (nTG < CConfig::ToneGenerators);
+	assert (nTG < CConfig::AllToneGenerators);
 	assert (Event == MenuEventTGDown || Event == MenuEventTGUp);
 	if (Event == MenuEventTGDown)
 	{
 		//LOGNOTE("TGDown");
 		if (nTG > 0) {
 			nTG--;
+			while (nTG > m_pConfig->GetToneGenerators() && nTG < CConfig::ToneGenerators && nTG > 0)
+			{
+				// Skip any unused local TGs
+				nTG--;
+			}
 		}
 	}
 	else
 	{
 		//LOGNOTE("TGUp");
-		if (nTG < CConfig::ToneGenerators - 1) {
+		if (nTG < CConfig::ToneGenerators+m_pConfig->GetTGExpanders() - 1) {
 			nTG++;
+			while (nTG > m_pConfig->GetToneGenerators() && nTG < CConfig::ToneGenerators && nTG < CConfig::ToneGenerators+m_pConfig->GetTGExpanders() - 1)
+			{
+				// Skip any unused local TGs
+				nTG++;
+			}
 		}
 	}
 

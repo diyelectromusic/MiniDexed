@@ -177,27 +177,59 @@ void CConfig::Load (void)
 
 unsigned CConfig::GetToneGenerators (void)
 {
+	assert (m_nTGLocal <= ToneGenerators);
 	return m_nTGLocal;
 }
 
 unsigned CConfig::GetTGExpanders (void)
 {
-	return TGExpanders;
+	assert (m_nTGRemote <= TGExpanders);
+	return m_nTGRemote;
 }
 
 unsigned CConfig::GetAllToneGenerators (void)
 {
+	// NB: Remote TGs always start from ToneGenerators regardless
+	//     of m_nTGLocal as the UI has to hard-code that in.
+	//     This means GetAllToneGenerators() is not the highest
+	//     numbered TG as there could be some non-active local
+	//     TGs if TGLocal < ToneGenerators.
+	//     But it will always be the number of active TGs - but
+	//     we can't assume they are consecutive.
+	assert (m_nTGLocal + m_nTGRemote <= AllToneGenerators);
 	return m_nTGLocal + m_nTGRemote;
 }
 
 unsigned CConfig::GetTGsCore1 (void)
 {
+#ifndef ARM_ALLOW_MULTI_CORE
+	return 0;
+#else
+#if (RASPPI==4)
+	if (m_nTGLocal > 8)
+	{
+		// Pi 4 has the option for additional TGs
+		return TGsCore1 + TGsCore1Exp;
+	}
+#endif
 	return TGsCore1;
+#endif
 }
 
 unsigned CConfig::GetTGsCore23 (void)
 {
+#ifndef ARM_ALLOW_MULTI_CORE
+	return 0;
+#else
+#if (RASPPI==4)
+	if (m_nTGLocal > 8)
+	{
+		// Pi 4 has the option for additional TGs
+		return TGsCore23 + TGsCore23Exp;
+	}
+#endif
 	return TGsCore23;
+#endif
 }
 
 const char *CConfig::GetSoundDevice (void) const

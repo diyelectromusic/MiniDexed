@@ -232,8 +232,8 @@ void CMIDIDevice::MIDIMessageHandler (const u8 *pMessage, size_t nLength, unsign
 			break;
 		}
 
-		// Process MIDI for each Tone Generator
-		for (unsigned nTG = 0; nTG < CConfig::ToneGenerators; nTG++)
+		// Process MIDI for each active Tone Generator
+		for (unsigned nTG = 0; nTG < m_pConfig->GetToneGenerators(); nTG++)
 		{
 			if (ucStatus == MIDI_SYSTEM_EXCLUSIVE_BEGIN)
 			{

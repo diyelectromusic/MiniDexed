@@ -23,6 +23,7 @@
 #ifndef _uimenu_h
 #define _uimenu_h
 
+#include "config.h"
 #include <string>
 #include <circle/timer.h>
 
@@ -53,7 +54,7 @@ public:
 	};
 
 public:
-	CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed);
+	CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed, CConfig *pConfig);
 
 	void EventHandler (TMenuEvent Event);
 	
@@ -127,6 +128,7 @@ private:
 private:
 	CUserInterface *m_pUI;
 	CMiniDexed *m_pMiniDexed;
+	CConfig *m_pConfig;
 	unsigned m_nTGLocal;
 	unsigned m_nTGRemote;
 

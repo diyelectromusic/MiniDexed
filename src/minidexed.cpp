@@ -61,6 +61,7 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 {
 	assert (m_pConfig);
 
+	LOGNOTE("Total Tone Generators = %d", pConfig->GetAllToneGenerators());
 	LOGNOTE("Local Tone Generators = %d", m_nTGLocal);
 	LOGNOTE("Remote Tone Generators = %d", m_nTGRemote);
 	LOGNOTE("Tone Generators on this device = %d to %d", m_nTGLocalStart, m_nTGLocalStart+m_nTGLocal-1);
@@ -99,8 +100,10 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 		
 		m_nReverbSend[i] = 0;
 		
-		// Now activate all real TGs
-		if (i < CConfig::ToneGenerators)
+		// Now activate all real and "live" TGs
+		// NB: This might be less than the theoretical max number
+		//     of TGs, depending on the configuration.
+		if (i < pConfig->GetToneGenerators())
 		{
 			m_uchOPMask[i] = 0b111111;	// All operators on
 
@@ -210,9 +213,9 @@ bool CMiniDexed::Initialize (void)
 		LOGNOTE("Program Change: Disabled");
 	}
 
-	// Set initial configuration for all real TGs.
-	// Note: the "remote" MiniDexed will do this for all remote TGs.
-	for (unsigned i = 0; i < CConfig::ToneGenerators; i++)
+	// Set initial configuration for all real "live" TGs.
+	// Note: the "remote" MiniDexed will do this for any remote TGs.
+	for (unsigned i = 0; i < m_pConfig->GetToneGenerators(); i++)
 	{
 		assert (m_pTG[i]);
 
@@ -382,8 +385,8 @@ void CMiniDexed::Run (unsigned nCore)
 			// process the TGs, assigned to this core (2 or 3)
 
 			assert (m_nFramesToProcess <= CConfig::MaxChunkSize);
-			unsigned nTG = CConfig::TGsCore1 + (nCore-2)*CConfig::TGsCore23;
-			for (unsigned i = 0; i < CConfig::TGsCore23; i++, nTG++)
+			unsigned nTG = m_pConfig->GetTGsCore1() + (nCore-2)*m_pConfig->GetTGsCore23();
+			for (unsigned i = 0; i < m_pConfig->GetTGsCore23(); i++, nTG++)
 			{
 				assert (m_pTG[nTG]);
 				m_pTG[nTG]->getSamples (m_OutputLevel[nTG],m_nFramesToProcess);
@@ -410,16 +413,24 @@ CSysExFileLoader *CMiniDexed::GetSysExFileLoader (void)
 //   and is set in CConfig::TGExpanders but it can be overridden
 //   to a lower number using the configuration file.
 //
-//   The default, i.e. nothing in the config file, is 0.
+//   NB: Remote TGs will always start from the value set in
+//       CConfig::ToneGenerators so if TGLocal is set to anything
+//       less than CConfig::ToneGenerators, then there will be
+//       a gap of unused TGs.
+//
+//   The default, i.e. nothing in the config file, is 0 (no remote TGs).
 //
 //   All functions working with real TGs only should check against
-//   CConfig::ToneGenerators.
+//   CConfig::ToneGenerators if allocating resources and against
+//   m_pConfig->GetToneGenerators() for the "live" number of active
+//   local TGs.
 //
 //   All functions working with real and remote TGs should check
-//   against CConfig::AllToneGenerators but work with the number
-//   given by m_nTGRemote when targetting remote TGs.
+//   against CConfig::AllToneGenerators if allocating resources but
+//   should work with the number given by m_nTGRemote when targetting
+//   remote TGs.
 //
-//   These will pass any SetxxParameter calls for remote
+//   These functions will pass any SetxxParameter calls for remote
 //   TGs off to the remote MiniDexed.
 //
 //   When commands for a remote TG come in, they will be translated
@@ -427,6 +438,11 @@ CSysExFileLoader *CMiniDexed::GetSysExFileLoader (void)
 //
 //   All values are cached here though, so the Getxx functions
 //   return local cached values, not the true remote values.
+//
+//   Recall that the nTG parameter that is passed around is
+//   0-indexed, but the TG numbers shown to the user (and used
+//   in the config file) are 1-indexed.  But this all happens
+//   in the ui so can be ignored here.
 //
 // The assumptions/limitations behind this are as follows:
 // - Both MiniDexed instances will have exactly the same
@@ -438,6 +454,9 @@ CSysExFileLoader *CMiniDexed::GetSysExFileLoader (void)
 // - There is no UI on the remote MiniDexed to get
 //   significantly out of sync, but using MIDI commands
 //   might still allow it to happen.
+// - The UI has different menus for local and remote TGs
+//   hence why all remote TGs always start after CConfig::ToneGenerators
+//   rather than m_pConfig->GetToneGenerators().
 
 unsigned CMiniDexed::getTGLocal (void)
 {
@@ -454,6 +473,7 @@ void CMiniDexed::BankSelect (unsigned nBank, unsigned nTG)
 	nBank=constrain((int)nBank,0,16383);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	
 	if (GetSysExFileLoader ()->IsValidBank(nBank))
 	{
@@ -469,6 +489,8 @@ void CMiniDexed::BankSelectMSB (unsigned nBankMSB, unsigned nTG)
 	nBankMSB=constrain((int)nBankMSB,0,127);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	// MIDI Spec 1.0 "BANK SELECT" states:
 	//   "The transmitter must transmit the MSB and LSB as a pair,
 	//   and the Program Change must be sent immediately after
@@ -484,6 +506,8 @@ void CMiniDexed::BankSelectLSB (unsigned nBankLSB, unsigned nTG)
 	nBankLSB=constrain((int)nBankLSB,0,127);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nVoiceBankIDLSB[nTG] = nBankLSB;
 	unsigned nBank = m_nVoiceBankID[nTG];
 	unsigned nBankMSB = m_nVoiceBankIDMSB[nTG];
@@ -521,6 +545,8 @@ void CMiniDexed::ProgramChange (unsigned nProgram, unsigned nTG)
 	}
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nProgram[nTG] = nProgram;
 
 	uint8_t Buffer[156];
@@ -563,6 +589,8 @@ void CMiniDexed::SetVolume (unsigned nVolume, unsigned nTG)
 	nVolume=constrain((int)nVolume,0,127);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nVolume[nTG] = nVolume;
 
 	assert (m_pTG[nTG]);
@@ -576,6 +604,8 @@ void CMiniDexed::SetPan (unsigned nPan, unsigned nTG)
 	nPan=constrain((int)nPan,0,127);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nPan[nTG] = nPan;
 	
 	tg_mixer->pan(nTG,mapfloat(nPan,0,127,0.0f,1.0f));
@@ -589,6 +619,8 @@ void CMiniDexed::SetReverbSend (unsigned nReverbSend, unsigned nTG)
 	nReverbSend=constrain((int)nReverbSend,0,99);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nReverbSend[nTG] = nReverbSend;
 
 	reverb_send_mixer->gain(nTG,mapfloat(nReverbSend,0,99,0.0f,1.0f));
@@ -601,6 +633,8 @@ void CMiniDexed::SetMasterTune (int nMasterTune, unsigned nTG)
 	nMasterTune=constrain((int)nMasterTune,-99,99);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nMasterTune[nTG] = nMasterTune;
 
 	assert (m_pTG[nTG]);
@@ -614,6 +648,8 @@ void CMiniDexed::SetCutoff (int nCutoff, unsigned nTG)
 	nCutoff = constrain (nCutoff, 0, 99);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nCutoff[nTG] = nCutoff;
 
 	assert (m_pTG[nTG]);
@@ -627,6 +663,8 @@ void CMiniDexed::SetResonance (int nResonance, unsigned nTG)
 	nResonance = constrain (nResonance, 0, 99);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	m_nResonance[nTG] = nResonance;
 
 	assert (m_pTG[nTG]);
@@ -635,12 +673,11 @@ void CMiniDexed::SetResonance (int nResonance, unsigned nTG)
 	m_UI.ParameterChanged ();
 }
 
-
-
 void CMiniDexed::SetMIDIChannel (uint8_t uchChannel, unsigned nTG)
 {
-	assert (nTG < CConfig::ToneGenerators);
 	assert (uchChannel < CMIDIDevice::ChannelUnknown);
+	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 
 	m_nMIDIChannel[nTG] = uchChannel;
 
@@ -658,6 +695,7 @@ void CMiniDexed::SetMIDIChannel (uint8_t uchChannel, unsigned nTG)
 	}
 
 #ifdef ARM_ALLOW_MULTI_CORE
+/* This doesn't appear to be used anywhere...
 	unsigned nActiveTGs = 0;
 	for (unsigned nTG = 0; nTG < CConfig::ToneGenerators; nTG++)
 	{
@@ -667,9 +705,10 @@ void CMiniDexed::SetMIDIChannel (uint8_t uchChannel, unsigned nTG)
 		}
 	}
 
-//	assert (nActiveTGs <= 8);
-//	static const unsigned Log2[] = {0, 0, 1, 2, 2, 3, 3, 3, 3};
-//	m_nActiveTGsLog2 = Log2[nActiveTGs];
+	assert (nActiveTGs <= 8);
+	static const unsigned Log2[] = {0, 0, 1, 2, 2, 3, 3, 3, 3};
+	m_nActiveTGsLog2 = Log2[nActiveTGs];
+*/
 #endif
 
 	m_UI.ParameterChanged ();
@@ -678,6 +717,8 @@ void CMiniDexed::SetMIDIChannel (uint8_t uchChannel, unsigned nTG)
 void CMiniDexed::keyup (int16_t pitch, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	assert (m_pTG[nTG]);
 
 	pitch = ApplyNoteLimits (pitch, nTG);
@@ -690,6 +731,8 @@ void CMiniDexed::keyup (int16_t pitch, unsigned nTG)
 void CMiniDexed::keydown (int16_t pitch, uint8_t velocity, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
+
 	assert (m_pTG[nTG]);
 
 	pitch = ApplyNoteLimits (pitch, nTG);
@@ -702,6 +745,7 @@ void CMiniDexed::keydown (int16_t pitch, uint8_t velocity, unsigned nTG)
 int16_t CMiniDexed::ApplyNoteLimits (int16_t pitch, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return -1; // Not an active TG
 
 	if (   pitch < (int16_t) m_nNoteLimitLow[nTG]
 	    || pitch > (int16_t) m_nNoteLimitHigh[nTG])
@@ -723,6 +767,7 @@ int16_t CMiniDexed::ApplyNoteLimits (int16_t pitch, unsigned nTG)
 void CMiniDexed::setSustain(bool sustain, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setSustain (sustain);
 }
@@ -730,6 +775,7 @@ void CMiniDexed::setSustain(bool sustain, unsigned nTG)
 void CMiniDexed::panic(uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	if (value == 0) {
 		m_pTG[nTG]->panic ();
@@ -739,6 +785,7 @@ void CMiniDexed::panic(uint8_t value, unsigned nTG)
 void CMiniDexed::notesOff(uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	if (value == 0) {
 		m_pTG[nTG]->notesOff ();
@@ -748,6 +795,7 @@ void CMiniDexed::notesOff(uint8_t value, unsigned nTG)
 void CMiniDexed::setModWheel (uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setModWheel (value);
 }
@@ -756,6 +804,7 @@ void CMiniDexed::setModWheel (uint8_t value, unsigned nTG)
 void CMiniDexed::setFootController (uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setFootController (value);
 }
@@ -763,6 +812,7 @@ void CMiniDexed::setFootController (uint8_t value, unsigned nTG)
 void CMiniDexed::setBreathController (uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setBreathController (value);
 }
@@ -770,6 +820,7 @@ void CMiniDexed::setBreathController (uint8_t value, unsigned nTG)
 void CMiniDexed::setAftertouch (uint8_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setAftertouch (value);
 }
@@ -777,6 +828,7 @@ void CMiniDexed::setAftertouch (uint8_t value, unsigned nTG)
 void CMiniDexed::setPitchbend (int16_t value, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->setPitchbend (value);
 }
@@ -784,6 +836,7 @@ void CMiniDexed::setPitchbend (int16_t value, unsigned nTG)
 void CMiniDexed::ControllersRefresh (unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_pTG[nTG]->ControllersRefresh ();
 }
@@ -792,7 +845,7 @@ void CMiniDexed::SetParameter (TParameter Parameter, int nValue)
 {
 	assert (reverb);
 
-	if ((m_nTGRemote == 0) && (m_nTGLocalStart>CConfig::ToneGenerators) && (Parameter > ParameterUnknown))
+	if ((m_nTGRemote == 0) && (m_nTGLocalStart > CConfig::ToneGenerators) && (Parameter > ParameterUnknown))
 	{
 		// Received a parameter from main TG that might need special handling...
 		if (Parameter == GLOBAL_PARAMETER_PERFORMANCE)
@@ -815,7 +868,7 @@ void CMiniDexed::SetParameter (TParameter Parameter, int nValue)
 	switch (Parameter)
 	{
 	case ParameterCompressorEnable:
-		for (unsigned nTG = 0; nTG < CConfig::ToneGenerators; nTG++)
+		for (unsigned nTG = 0; nTG < m_pConfig->GetToneGenerators(); nTG++)
 		{
 			assert (m_pTG[nTG]);
 			m_pTG[nTG]->setCompressor (!!nValue);
@@ -893,18 +946,27 @@ void CMiniDexed::SetTGParameter (TTGParameter Parameter, int nValue, unsigned nT
 
 	if (nTG >= CConfig::ToneGenerators)
 	{
-		// Cache the value for further retrieval
-		SetTGExpanderParameter(Parameter, nValue, nTG);
-
-		if ((m_nTGRemote > 0) && (m_nTGLocalStart==1))
+		// This is for a remote TG.
+		if (nTG < CConfig::ToneGenerators + m_pConfig->GetTGExpanders())
 		{
-			// Pass parameter change on to remote TGs.
-			//LOGNOTE("SetTGParameter: Sending to remote TG%d %d=%d", nTG+1, Parameter, nValue);
-			remoteTGSend (nTG, (unsigned)Parameter, nValue);
-		}
+			// It is an active remote TG.
+			// Cache the value for further retrieval
+			SetTGExpanderParameter(Parameter, nValue, nTG);
 
+			if ((m_nTGRemote > 0) && (m_nTGLocalStart==1))
+			{
+				// Pass parameter change on to remote TGs.
+				//LOGNOTE("SetTGParameter: Sending to remote TG%d %d=%d", nTG+1, Parameter, nValue);
+				remoteTGSend (nTG, (unsigned)Parameter, nValue);
+			}
+		}
 		// No further processing for remote TGs
 		return;
+	}
+	
+	if (nTG >= m_pConfig->GetToneGenerators())
+	{
+		return; // Not an active local TG
 	}
 
 	switch (Parameter)
@@ -964,6 +1026,11 @@ void CMiniDexed::SetTGExpanderParameter (TTGParameter Parameter, int nValue, uns
 
 	if (nTG >= CConfig::ToneGenerators)
 	{
+		if (nTG >= CConfig::ToneGenerators + m_pConfig->GetTGExpanders())
+		{
+			return; // Not an active remote TG
+		}
+
 		switch (Parameter)
 		{
 		case TGParameterVoiceBank:		m_nVoiceBankID[nTG] = nValue;	break;
@@ -1067,6 +1134,7 @@ int CMiniDexed::GetTGParameter (TTGParameter Parameter, unsigned nTG)
 void CMiniDexed::SetVoiceParameter (uint8_t uchOffset, uint8_t uchValue, unsigned nOP, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	assert (nOP <= 6);
 
@@ -1100,6 +1168,7 @@ void CMiniDexed::SetVoiceParameter (uint8_t uchOffset, uint8_t uchValue, unsigne
 uint8_t CMiniDexed::GetVoiceParameter (uint8_t uchOffset, unsigned nOP, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return 0; // Not an active TG
 	assert (m_pTG[nTG]);
 	assert (nOP <= 6);
 
@@ -1127,8 +1196,16 @@ std::string CMiniDexed::GetVoiceName (unsigned nTG)
 		char VoiceName[11];
 		memset (VoiceName, 0, sizeof VoiceName);
 		
-		assert (m_pTG[nTG]);
-		m_pTG[nTG]->setName (VoiceName);
+		if (nTG < m_pConfig->GetToneGenerators())
+		{
+			assert (m_pTG[nTG]);
+			m_pTG[nTG]->setName (VoiceName);
+		}
+		else
+		{
+			// Not an active TG
+			VoiceName[0] = 32;  // space
+		}
 		std::string Result (VoiceName);
 		
 		return Result;
@@ -1199,7 +1276,7 @@ void CMiniDexed::ProcessSound (void)
 
 		// process the TGs assigned to core 1
 		assert (nFrames <= CConfig::MaxChunkSize);
-		for (unsigned i = 0; i < CConfig::TGsCore1; i++)
+		for (unsigned i = 0; i < m_pConfig->GetTGsCore1(); i++)
 		{
 			assert (m_pTG[i]);
 			m_pTG[i]->getSamples (m_OutputLevel[i], nFrames);
@@ -1228,7 +1305,7 @@ void CMiniDexed::ProcessSound (void)
 
 		if(nMasterVolume > 0.0)
 		{
-			for (uint8_t i = 0; i < CConfig::ToneGenerators; i++)
+			for (uint8_t i = 0; i < m_pConfig->GetToneGenerators(); i++)
 			{
 				tg_mixer->doAddMix(i,m_OutputLevel[i]);
 				reverb_send_mixer->doAddMix(i,m_OutputLevel[i]);
@@ -1398,6 +1475,7 @@ bool CMiniDexed::DoSavePerformance (void)
 void CMiniDexed::setMonoMode(uint8_t mono, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_bMonoMode[nTG]= mono != 0; 
 	m_pTG[nTG]->setMonoMode(constrain(mono, 0, 1));
@@ -1409,6 +1487,7 @@ void CMiniDexed::setPitchbendRange(uint8_t range, uint8_t nTG)
 {
 	range = constrain (range, 0, 12);
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_nPitchBendRange[nTG] = range;
 	
@@ -1421,6 +1500,7 @@ void CMiniDexed::setPitchbendStep(uint8_t step, uint8_t nTG)
 {
 	step= constrain (step, 0, 12);
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_nPitchBendStep[nTG] = step;
 	
@@ -1434,6 +1514,7 @@ void CMiniDexed::setPortamentoMode(uint8_t mode, uint8_t nTG)
 	mode= constrain (mode, 0, 1);
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_nPortamentoMode[nTG] = mode;
 	
@@ -1446,6 +1527,7 @@ void CMiniDexed::setPortamentoGlissando(uint8_t glissando, uint8_t nTG)
 {
 	glissando = constrain (glissando, 0, 1);
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_nPortamentoGlissando[nTG] = glissando;
 	
@@ -1458,6 +1540,7 @@ void CMiniDexed::setPortamentoTime(uint8_t time, uint8_t nTG)
 {
 	time = constrain (time, 0, 99);
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	m_nPortamentoTime[nTG] = time;
 	
@@ -1469,6 +1552,7 @@ void CMiniDexed::setPortamentoTime(uint8_t time, uint8_t nTG)
 void CMiniDexed::setModWheelRange(uint8_t range, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nModulationWheelRange[nTG] = range;
@@ -1482,6 +1566,7 @@ void CMiniDexed::setModWheelRange(uint8_t range, uint8_t nTG)
 void CMiniDexed::setModWheelTarget(uint8_t target, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nModulationWheelTarget[nTG] = target;
@@ -1494,6 +1579,7 @@ void CMiniDexed::setModWheelTarget(uint8_t target, uint8_t nTG)
 void CMiniDexed::setFootControllerRange(uint8_t range, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nFootControlRange[nTG]=range;
@@ -1507,6 +1593,7 @@ void CMiniDexed::setFootControllerRange(uint8_t range, uint8_t nTG)
 void CMiniDexed::setFootControllerTarget(uint8_t target, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nFootControlTarget[nTG] = target;
@@ -1519,6 +1606,7 @@ void CMiniDexed::setFootControllerTarget(uint8_t target, uint8_t nTG)
 void CMiniDexed::setBreathControllerRange(uint8_t range, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nBreathControlRange[nTG]=range;
@@ -1532,6 +1620,7 @@ void CMiniDexed::setBreathControllerRange(uint8_t range, uint8_t nTG)
 void CMiniDexed::setBreathControllerTarget(uint8_t target, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nBreathControlTarget[nTG]=target;
@@ -1544,6 +1633,7 @@ void CMiniDexed::setBreathControllerTarget(uint8_t target, uint8_t nTG)
 void CMiniDexed::setAftertouchRange(uint8_t range, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nAftertouchRange[nTG]=range;
@@ -1557,6 +1647,7 @@ void CMiniDexed::setAftertouchRange(uint8_t range, uint8_t nTG)
 void CMiniDexed::setAftertouchTarget(uint8_t target, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_nAftertouchTarget[nTG]=target;
@@ -1569,6 +1660,7 @@ void CMiniDexed::setAftertouchTarget(uint8_t target, uint8_t nTG)
 void CMiniDexed::loadVoiceParameters(const uint8_t* data, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	uint8_t voice[161];
@@ -1590,6 +1682,7 @@ void CMiniDexed::loadVoiceParameters(const uint8_t* data, uint8_t nTG)
 void CMiniDexed::setVoiceDataElement(uint8_t data, uint8_t number, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_pTG[nTG]->setVoiceDataElement(constrain(data, 0, 155),constrain(number, 0, 99));
@@ -1600,6 +1693,7 @@ void CMiniDexed::setVoiceDataElement(uint8_t data, uint8_t number, uint8_t nTG)
 int16_t CMiniDexed::checkSystemExclusive(const uint8_t* pMessage,const  uint16_t nLength, uint8_t nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return 0; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	return(m_pTG[nTG]->checkSystemExclusive(pMessage, nLength));
@@ -1611,6 +1705,7 @@ void CMiniDexed::getSysExVoiceDump(uint8_t* dest, uint8_t nTG)
 	uint8_t data[155];
 
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 
 	m_pTG[nTG]->getVoiceData(data);
@@ -1794,6 +1889,7 @@ void CMiniDexed::SetNewPerformanceName(std::string nName)
 void CMiniDexed::SetVoiceName (std::string VoiceName, unsigned nTG)
 {
 	assert (nTG < CConfig::ToneGenerators);
+	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
 	assert (m_pTG[nTG]);
 	char Name[10];
 	strncpy(Name, VoiceName.c_str(),10);
@@ -2028,14 +2124,14 @@ void CMiniDexed::remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength)
 			}
 			else if ((nTG < CConfig::AllToneGenerators) && (nTG >= CConfig::ToneGenerators))
 			{
-				if (m_nTGLocalStart > m_nTGLocal)
+				if (m_nTGLocalStart > CConfig::ToneGenerators)
 				{
 					// Expanded TG Parameter
 					TTGParameter Parameter = (TTGParameter)nParameter;
 					int nValue = (int)nTemp;
 
 					// Translate over to "real" TG numbers
-					nTG = nTG - m_nTGLocal;
+					nTG = nTG - CConfig::ToneGenerators;
 					SetTGParameter(Parameter, nValue, nTG);				
 				}
 			}
