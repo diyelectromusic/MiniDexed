@@ -56,13 +56,42 @@ void CConfig::Load (void)
   		m_EngineType = MSFA;
 	}
 
-#ifdef ARM_ALLOW_MULTI_CORE
-	m_nTGLocal = m_Properties.GetNumber ("TGLocal", 8);
+	// In practice the only supported value for TGLocal at the moment
+	// is ToneGenerator but on a Pi 4 there is the option to half the
+	// number of TGs if required.
+	//
+	// In future it should be possible to limit the number of local TGs
+	// for any setup to less than ToneGenerators if required using this
+	// config option, but it would require some intelligence about how
+	// they are split across the cores which isn't implemented at present.
+	//
+	// This would affect the use of TGsCore1 and TGsCore23 in config.cpp
+	// and minidexed.cpp.
+	//
+	// It also might need some rethinking of the UI as the menus for
+	// expanders aren't dynamically created, they are hard-coded for now.
+	//
+#if RASPPI==4
+	// Default if no config is the legacy setting for Pi 4.
+	m_nTGLocal = m_Properties.GetNumber ("TGLocal", HalfToneGenerators);
 #else
-	m_nTGLocal = m_Properties.GetNumber ("TGLocal", 1);
+	m_nTGLocal = m_Properties.GetNumber ("TGLocal", ToneGenerators);
 #endif
 	if (m_nTGLocal > ToneGenerators)
 	{
+		m_nTGLocal = ToneGenerators;
+	}
+#if RASPPI==4
+	else if (m_nTGLocal <= HalfToneGenerators)
+	{
+		// Option to limit Pi 4 to half number of TGs
+		m_nTGLocal = HalfToneGenerators;
+	}
+#endif
+	else if (m_nTGLocal < ToneGenerators)
+	{
+		// For the present, don't allow an option for less
+		// than the "standard" number of ToneGenerators.
 		m_nTGLocal = ToneGenerators;
 	}
 	m_nTGRemote = m_Properties.GetNumber ("TGRemote", 0);
@@ -206,7 +235,7 @@ unsigned CConfig::GetTGsCore1 (void)
 	return 0;
 #else
 #if (RASPPI==4)
-	if (m_nTGLocal > 8)
+	if (m_nTGLocal > HalfToneGenerators)
 	{
 		// Pi 4 has the option for additional TGs
 		return TGsCore1 + TGsCore1Exp;
@@ -222,7 +251,7 @@ unsigned CConfig::GetTGsCore23 (void)
 	return 0;
 #else
 #if (RASPPI==4)
-	if (m_nTGLocal > 8)
+	if (m_nTGLocal > HalfToneGenerators)
 	{
 		// Pi 4 has the option for additional TGs
 		return TGsCore23 + TGsCore23Exp;

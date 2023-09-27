@@ -54,6 +54,7 @@ public:
 	static const unsigned TGsCore23 = 3;		// process 3 TGs on core 2 and 3 each
 	static const unsigned TGsCore1Exp = 2;		// process optional additional 2 TGs on core 1
 	static const unsigned TGsCore23Exp = 3;		// process optional additional 3 TGs on core 2 and 3 each
+	static const unsigned HalfToneGenerators = TGsCore1 + 2*TGsCore23;
 	static const unsigned ToneGenerators = TGsCore1 + TGsCore1Exp + 2*TGsCore23 + 2*TGsCore23Exp;
 	static const unsigned TGExpanders = TG_EXPANDERS;
 	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;

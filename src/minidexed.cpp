@@ -388,8 +388,12 @@ void CMiniDexed::Run (unsigned nCore)
 			unsigned nTG = m_pConfig->GetTGsCore1() + (nCore-2)*m_pConfig->GetTGsCore23();
 			for (unsigned i = 0; i < m_pConfig->GetTGsCore23(); i++, nTG++)
 			{
-				assert (m_pTG[nTG]);
-				m_pTG[nTG]->getSamples (m_OutputLevel[nTG],m_nFramesToProcess);
+				assert (nTG < CConfig::ToneGenerators);
+				if (nTG < m_pConfig->GetToneGenerators())
+				{
+					assert (m_pTG[nTG]);
+					m_pTG[nTG]->getSamples (m_OutputLevel[nTG],m_nFramesToProcess);
+				}
 			}
 		}
 	}
@@ -1439,7 +1443,13 @@ bool CMiniDexed::DoSavePerformance (void)
 		m_PerformanceConfig.SetNoteLimitLow (m_nNoteLimitLow[nTG], nTG);
 		m_PerformanceConfig.SetNoteLimitHigh (m_nNoteLimitHigh[nTG], nTG);
 		m_PerformanceConfig.SetNoteShift (m_nNoteShift[nTG], nTG);
-		m_pTG[nTG]->getVoiceData(m_nRawVoiceData);  
+		if (nTG < m_pConfig->GetToneGenerators())
+		{
+			m_pTG[nTG]->getVoiceData(m_nRawVoiceData);
+		} else {
+			// Not an active TG so provide default voice by asking for an invalid voice ID.
+			m_SysExFileLoader.GetVoice(CSysExFileLoader::MaxVoiceBankID, CSysExFileLoader::VoicesPerBank+1, m_nRawVoiceData);
+		}
  		m_PerformanceConfig.SetVoiceDataToTxt (m_nRawVoiceData, nTG); 
 		m_PerformanceConfig.SetMonoMode (m_bMonoMode[nTG], nTG); 
 				
@@ -1705,10 +1715,16 @@ void CMiniDexed::getSysExVoiceDump(uint8_t* dest, uint8_t nTG)
 	uint8_t data[155];
 
 	assert (nTG < CConfig::ToneGenerators);
-	if (nTG >= m_pConfig->GetToneGenerators()) return; // Not an active TG
-	assert (m_pTG[nTG]);
-
-	m_pTG[nTG]->getVoiceData(data);
+	if (nTG < m_pConfig->GetToneGenerators())
+	{
+		assert (m_pTG[nTG]);
+		m_pTG[nTG]->getVoiceData(data);
+	}
+	else
+	{
+		// Not an active TG so grab a default voice
+		m_SysExFileLoader.GetVoice(CSysExFileLoader::MaxVoiceBankID, CSysExFileLoader::VoicesPerBank+1, data);
+	}
 
 	dest[0] = 0xF0; // SysEx start
 	dest[1] = 0x43; // ID=Yamaha
@@ -1845,7 +1861,7 @@ void CMiniDexed::LoadPerformanceParameters(void)
 			m_nNoteLimitHigh[nTG] = m_PerformanceConfig.GetNoteLimitHigh (nTG);
 			m_nNoteShift[nTG] = m_PerformanceConfig.GetNoteShift (nTG);
 			
-			if(m_PerformanceConfig.VoiceDataFilled(nTG)) 
+			if((nTG < m_pConfig->GetToneGenerators()) && m_PerformanceConfig.VoiceDataFilled(nTG)) 
 			{
 			uint8_t* tVoiceData = m_PerformanceConfig.GetVoiceDataFromTxt(nTG);
 			m_pTG[nTG]->loadVoiceParameters(tVoiceData); 
@@ -2097,7 +2113,7 @@ void CMiniDexed::remoteTGSend (unsigned nTG, unsigned nParameter, int nValue)
 		msg[4] = (nTemp >> 7);
 		msg[5] = nTemp & 0x7F;
 
-		printf("remoteTGSend: %02X %02X %02X %02X %02X %02X %02X\n", msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6]);
+		//printf("remoteTGSend: %02X %02X %02X %02X %02X %02X %02X\n", msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6]);
 		m_SerialMIDI.Send(msg, MD_PARAM_MSG_LEN, 0);
 	}
 }
@@ -2110,7 +2126,7 @@ void CMiniDexed::remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength)
 		if ((pMessage[0] == 0xF0) && (pMessage[1] == 0x7D) && (pMessage[MD_PARAM_MSG_LEN-1] == 0xF7) &&
 			(pMessage[2] <= GLOBAL_PARAMETER_TG) && (pMessage[4] < 128) && (pMessage[5] < 128))
 		{
-			printf("remoteTGRecv: %02X %02X %02X %02X %02X %02X %02X\n", pMessage[0], pMessage[1], pMessage[2], pMessage[3], pMessage[4], pMessage[5], pMessage[6]);
+			//printf("remoteTGRecv: %02X %02X %02X %02X %02X %02X %02X\n", pMessage[0], pMessage[1], pMessage[2], pMessage[3], pMessage[4], pMessage[5], pMessage[6]);
 			unsigned nTG = pMessage[2];
 			unsigned nParameter = pMessage[3];
 			unsigned nTemp = (pMessage[4]<<7) + pMessage[5];
