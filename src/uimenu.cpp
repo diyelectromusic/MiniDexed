@@ -42,6 +42,18 @@ const CUIMenu::TMenuItem CUIMenu::s_MenuRoot[] =
 // inserting menu items before "TG1" affect TGShortcutHandler()
 const CUIMenu::TMenuItem CUIMenu::s_MainMenu[] =
 {
+#if (RASPPI==1)
+	{"TG1",		MenuHandler,	s_TGMenu, 0},
+#if (TG_EXPANDERS>0)
+	{"TG2",		MenuHandler,	s_TGExpMenu, 1},
+	{"TG3",		MenuHandler,	s_TGExpMenu, 2},
+	{"TG4",		MenuHandler,	s_TGExpMenu, 3},
+	{"TG5",		MenuHandler,	s_TGExpMenu, 4},
+	{"TG6",		MenuHandler,	s_TGExpMenu, 5},
+	{"TG7",		MenuHandler,	s_TGExpMenu, 6},
+	{"TG8",		MenuHandler,	s_TGExpMenu, 7},
+#endif
+#else // RASPPI > 1
 	{"TG1",		MenuHandler,	s_TGMenu, 0},
 #ifdef ARM_ALLOW_MULTI_CORE
 	{"TG2",		MenuHandler,	s_TGMenu, 1},
@@ -64,8 +76,6 @@ const CUIMenu::TMenuItem CUIMenu::s_MainMenu[] =
 #else // RASPPI!=4
 #if (TG_EXPANDERS>0)
 	{"TG9",		MenuHandler,	s_TGExpMenu, 8},
-#endif
-#if (TG_EXPANDERS>1)
 	{"TG10",	MenuHandler,	s_TGExpMenu, 9},
 	{"TG11",	MenuHandler,	s_TGExpMenu, 10},
 	{"TG12",	MenuHandler,	s_TGExpMenu, 11},
@@ -75,6 +85,7 @@ const CUIMenu::TMenuItem CUIMenu::s_MainMenu[] =
 	{"TG16",	MenuHandler,	s_TGExpMenu, 15},
 #endif
 #endif // RASPPI==4
+#endif // RASPPI==1
 	{"Effects",	MenuHandler,	s_EffectsMenu},
 	{"Performance",	MenuHandler, s_PerformanceMenu}, 
 	{0}
@@ -392,23 +403,24 @@ CUIMenu::CUIMenu (CUserInterface *pUI, CMiniDexed *pMiniDexed, CConfig *pConfig)
 	m_nTGLocal = pMiniDexed->getTGLocal();
 	m_nTGRemote = pMiniDexed->getTGRemote();
 
-#ifndef ARM_ALLOW_MULTI_CORE
-	// If there is just one core, then there is only a single
-	// tone generator so start on the TG1 menu...
-	m_pParentMenu = s_MainMenu;
-	m_pCurrentMenu = s_TGMenu;
-	m_nCurrentMenuItem = 0;
-	m_nCurrentSelection = 0;
-	m_nCurrentParameter = 0;
-	m_nCurrentMenuDepth = 1;
+	if (m_pConfig->GetAllToneGenerators() == 1)
+	{
+		// If there is just one core, then there is only a single
+		// tone generator so start on the TG1 menu...
+		m_pParentMenu = s_MainMenu;
+		m_pCurrentMenu = s_TGMenu;
+		m_nCurrentMenuItem = 0;
+		m_nCurrentSelection = 0;
+		m_nCurrentParameter = 0;
+		m_nCurrentMenuDepth = 1;
 
-	// Place the "root" menu at the top of the stack
-	m_MenuStackParent[0] = s_MenuRoot;
-	m_MenuStackMenu[0] = s_MainMenu;
-	m_nMenuStackItem[0]	= 0;
-	m_nMenuStackSelection[0] = 0;
-	m_nMenuStackParameter[0] = 0;
-#endif
+		// Place the "root" menu at the top of the stack
+		m_MenuStackParent[0] = s_MenuRoot;
+		m_MenuStackMenu[0] = s_MainMenu;
+		m_nMenuStackItem[0]	= 0;
+		m_nMenuStackSelection[0] = 0;
+		m_nMenuStackParameter[0] = 0;
+	}
 }
 
 void CUIMenu::EventHandler (TMenuEvent Event)
@@ -431,28 +443,29 @@ void CUIMenu::EventHandler (TMenuEvent Event)
 		break;
 
 	case MenuEventHome:
-#ifdef ARM_ALLOW_MULTI_CORE
-		m_pParentMenu = s_MenuRoot;
-		m_pCurrentMenu = s_MainMenu;
-		m_nCurrentMenuItem = 0;
-		m_nCurrentSelection = 0;
-		m_nCurrentParameter = 0;
-		m_nCurrentMenuDepth = 0;
-#else
-		// "Home" is the TG0 menu if only one TG active
-		m_pParentMenu = s_MainMenu;
-		m_pCurrentMenu = s_TGMenu;
-		m_nCurrentMenuItem = 0;
-		m_nCurrentSelection = 0;
-		m_nCurrentParameter = 0;
-		m_nCurrentMenuDepth = 1;
-		// Place the "root" menu at the top of the stack
-		m_MenuStackParent[0] = s_MenuRoot;
-		m_MenuStackMenu[0] = s_MainMenu;
-		m_nMenuStackItem[0] = 0;
-		m_nMenuStackSelection[0] = 0;
-		m_nMenuStackParameter[0] = 0;
-#endif
+		if (m_pConfig->GetAllToneGenerators() == 1)
+		{
+			// "Home" is the TG0 menu if only one TG active
+			m_pParentMenu = s_MainMenu;
+			m_pCurrentMenu = s_TGMenu;
+			m_nCurrentMenuItem = 0;
+			m_nCurrentSelection = 0;
+			m_nCurrentParameter = 0;
+			m_nCurrentMenuDepth = 1;
+			// Place the "root" menu at the top of the stack
+			m_MenuStackParent[0] = s_MenuRoot;
+			m_MenuStackMenu[0] = s_MainMenu;
+			m_nMenuStackItem[0] = 0;
+			m_nMenuStackSelection[0] = 0;
+			m_nMenuStackParameter[0] = 0;
+		} else {
+			m_pParentMenu = s_MenuRoot;
+			m_pCurrentMenu = s_MainMenu;
+			m_nCurrentMenuItem = 0;
+			m_nCurrentSelection = 0;
+			m_nCurrentParameter = 0;
+			m_nCurrentMenuDepth = 0;
+		}
 		EventHandler (MenuEventUpdate);
 		break;
 
@@ -515,11 +528,18 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 			}
 		}
 		// Also might need to trim menu if local TGs is configured to be less than the maximum supported
-		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators) &&
-			   (pUIMenu->m_nCurrentSelection > 0))
+		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_nCurrentSelection > 0) &&
+			  	(
+					// Skip any unused local menus
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators)
+				) || (
+					// Skip any unused expander menus
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) &&
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_pConfig->GetAllToneGenerators())
+				)
+			  )
 		{
 			pUIMenu->m_nCurrentSelection--;
 		}
@@ -541,11 +561,18 @@ void CUIMenu::MenuHandler (CUIMenu *pUIMenu, TMenuEvent Event)
 			}
 		}
 		// Also might need to trim menu if local TGs is configured to be less than the maximum supported
-		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators) &&
-			   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name))
+		while ((pUIMenu->m_pCurrentMenu == s_MainMenu) && (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection+1].Name) &&
+			   	(
+					// Skip any unused local menus
+				   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGMenu) &&
+				   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_nTGLocal) &&
+				   (pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter < CConfig::ToneGenerators)
+				) || (
+					// Skip any unused expander menus
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].MenuItem == s_TGExpMenu) &&
+			   		(pUIMenu->m_pCurrentMenu[pUIMenu->m_nCurrentSelection].Parameter >= pUIMenu->m_pConfig->GetAllToneGenerators())
+				)
+			  )
 		{
 			pUIMenu->m_nCurrentSelection++;
 		}
@@ -1250,7 +1277,7 @@ void CUIMenu::TGShortcutHandler (TMenuEvent Event)
 		nTG++;
 	}
 
-	if (nTG < CConfig::AllToneGenerators)
+	if (nTG < m_pConfig->GetAllToneGenerators())
 	{
 		m_nMenuStackSelection[0] = nTG;
 		m_nMenuStackItem[1] = nTG;

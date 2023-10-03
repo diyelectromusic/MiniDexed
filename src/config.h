@@ -41,7 +41,7 @@ public:
 	// These constants define the maximum configuration as per the build-time configuration
 #ifndef ARM_ALLOW_MULTI_CORE
 	// Pi V1 or Zero (single core)
-	#define TG_EXPANDERS 1 // Max number of remote TGs (Optional)
+	#define TG_EXPANDERS 7 // Max number of remote TGs (Optional)
 	static const unsigned ToneGenerators = 1;
 	static const unsigned TGExpanders = TG_EXPANDERS;
 	static const unsigned AllToneGenerators = ToneGenerators + TGExpanders;
