@@ -2113,7 +2113,7 @@ void CMiniDexed::remoteTGSend (unsigned nTG, unsigned nParameter, int nValue)
 		msg[4] = (nTemp >> 7);
 		msg[5] = nTemp & 0x7F;
 
-		//printf("remoteTGSend: %02X %02X %02X %02X %02X %02X %02X\n", msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6]);
+		printf("remoteTGSend: %02X %02X %02X %02X %02X %02X %02X\n", msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6]);
 		m_SerialMIDI.Send(msg, MD_PARAM_MSG_LEN, 0);
 	}
 }
@@ -2126,19 +2126,23 @@ void CMiniDexed::remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength)
 		if ((pMessage[0] == 0xF0) && (pMessage[1] == 0x7D) && (pMessage[MD_PARAM_MSG_LEN-1] == 0xF7) &&
 			(pMessage[2] <= GLOBAL_PARAMETER_TG) && (pMessage[4] < 128) && (pMessage[5] < 128))
 		{
-			//printf("remoteTGRecv: %02X %02X %02X %02X %02X %02X %02X\n", pMessage[0], pMessage[1], pMessage[2], pMessage[3], pMessage[4], pMessage[5], pMessage[6]);
+			printf("remoteTGRecv: %02X %02X %02X %02X %02X %02X %02X\n", pMessage[0], pMessage[1], pMessage[2], pMessage[3], pMessage[4], pMessage[5], pMessage[6]);
 			unsigned nTG = pMessage[2];
 			unsigned nParameter = pMessage[3];
 			unsigned nTemp = (pMessage[4]<<7) + pMessage[5];
 
-			if (nTG < CConfig::ToneGenerators)
+			if (nTG < m_pConfig->GetToneGenerators())
 			{
 				// Real TG Parameter
 				TTGParameter Parameter = (TTGParameter)nParameter;
 				int nValue = (int)nTemp;
 				SetTGParameter(Parameter, nValue, nTG);
 			}
-			else if ((nTG < CConfig::AllToneGenerators) && (nTG >= CConfig::ToneGenerators))
+			else if ((nTG < CConfig::AllToneGenerators) &&
+					 (nTG >= CConfig::ToneGenerators) &&
+					 (nTG >= m_nTGLocalStart-1) &&
+					 (nTG < m_nTGLocalStart - 1 + m_pConfig->GetToneGenerators())
+					)
 			{
 				if (m_nTGLocalStart > CConfig::ToneGenerators)
 				{
@@ -2147,7 +2151,7 @@ void CMiniDexed::remoteTGRecv (const uint8_t *pMessage, const uint16_t nLength)
 					int nValue = (int)nTemp;
 
 					// Translate over to "real" TG numbers
-					nTG = nTG - CConfig::ToneGenerators;
+					nTG = nTG - (m_nTGLocalStart - 1);
 					SetTGParameter(Parameter, nValue, nTG);				
 				}
 			}
