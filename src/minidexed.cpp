@@ -114,6 +114,15 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 			m_pTG[i]->activate ();
 		}
 	}
+		
+	if (pConfig->GetUSBGadgetMode())
+	{
+		LOGNOTE ("USB In Gadget (Device) Mode");
+	}
+	else
+	{
+		LOGNOTE ("USB In Host Mode");
+	}
 
 	if (pConfig->GetUSBGadgetMode())
 	{

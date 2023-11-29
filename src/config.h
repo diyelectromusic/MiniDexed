@@ -93,6 +93,9 @@ public:
 	~CConfig (void);
 
 	void Load (void);
+	
+	// USB Mode
+	bool GetUSBGadgetMode (void) const;	// true if in USB gadget mode
 
 	// USB Mode
 	bool GetUSBGadgetMode (void) const;	// true if in USB gadget mode
@@ -204,6 +207,8 @@ public:
 
 private:
 	CPropertiesFatFsFile m_Properties;
+	
+	bool m_bUSBGadgetMode;
 
 	bool m_bUSBGadgetMode;
 

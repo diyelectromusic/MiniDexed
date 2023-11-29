@@ -35,6 +35,8 @@ CConfig::~CConfig (void)
 void CConfig::Load (void)
 {
 	m_Properties.Load ();
+	
+	m_bUSBGadgetMode = m_Properties.GetNumber ("USBGadget", 0) != 0;
 
 	m_bUSBGadgetMode = m_Properties.GetNumber ("USBGadget", 0) != 0;
 
@@ -206,6 +208,7 @@ void CConfig::Load (void)
 	m_bPerformanceSelectChannel = m_Properties.GetNumber ("PerformanceSelectChannel", 0);
 }
 
+<<<<<<< HEAD
 unsigned CConfig::GetToneGenerators (void)
 {
 	assert (m_nTGLocal <= ToneGenerators);
