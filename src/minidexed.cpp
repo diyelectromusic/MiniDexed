@@ -115,6 +115,15 @@ CMiniDexed::CMiniDexed (CConfig *pConfig, CInterruptSystem *pInterrupt,
 		}
 	}
 
+	if (pConfig->GetUSBGadgetMode())
+	{
+		LOGNOTE ("USB In Gadget (Device) Mode");
+	}
+	else
+	{
+		LOGNOTE ("USB In Host Mode");
+	}
+	
 	for (unsigned i = 0; i < CConfig::MaxUSBMIDIDevices; i++)
 	{
 		m_pMIDIKeyboard[i] = new CMIDIKeyboard (this, pConfig, &m_UI, i);
